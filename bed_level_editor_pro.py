@@ -996,8 +996,14 @@ class BedLevelEditorPro:
                               font=('Consolas', 16, 'bold'), justify=tk.CENTER, width=12,
                               bg=self.colors['bg_medium'], fg=self.colors['accent_green'],
                               relief=tk.FLAT, insertbackground=self.colors['accent_green'])
-        value_entry.pack(pady=(0, 8), ipady=8)
+        value_entry.pack(pady=(0, 4), ipady=8)
         value_entry.bind('<Return>', lambda e: self.update_selection_value())
+
+        # Hint label for relative adjustments
+        hint_label = tk.Label(value_frame, text="Tip: Use +0.01 or -0.02 for relative adjustments",
+                             font=self.fonts['small'], bg=self.colors['bg_dark'],
+                             fg=self.colors['fg_secondary'], wraplength=260)
+        hint_label.pack(pady=(0, 8))
 
         # Quick adjust buttons (bigger, clearer)
         quick_frame = tk.Frame(adjust_section, bg=self.colors['bg_light'])
@@ -1046,6 +1052,26 @@ class BedLevelEditorPro:
 
         # ===== REGION TOOLS =====
         region_section = self.create_section(scrollable_frame, "🔧 Region Tools")
+
+        # Quick offset buttons for region
+        tk.Label(region_section, text="Quick Offset (Region)", font=self.fonts['small'],
+                bg=self.colors['bg_light'], fg=self.colors['fg_secondary']).pack(pady=(10, 5))
+
+        offset_frame = tk.Frame(region_section, bg=self.colors['bg_light'])
+        offset_frame.pack(pady=(0, 10))
+
+        offset_buttons = [
+            ("-0.05", -0.05, self.colors['accent_red']),
+            ("-0.01", -0.01, self.colors['accent_orange']),
+            ("+0.01", 0.01, self.colors['accent_blue']),
+            ("+0.05", 0.05, self.colors['accent_green']),
+        ]
+
+        for label, value, color in offset_buttons:
+            btn = ModernButton(offset_frame, text=label, command=lambda v=value: self.apply_region_offset(v),
+                             bg=color, fg='white', font=self.fonts['normal'],
+                             relief=tk.FLAT, width=6, cursor='hand2')
+            btn.pack(side=tk.LEFT, padx=3)
 
         region_buttons = [
             ("📊 Average Region", self.average_region, self.colors['accent_orange']),
@@ -1713,38 +1739,76 @@ class BedLevelEditorPro:
             pass
 
     def update_selection_value(self):
-        """Update the selected point or region value"""
+        """Update the selected point or region value (supports absolute and relative adjustments)"""
         try:
-            new_value = float(self.value_var.get())
+            value_str = self.value_var.get().strip()
 
-            if self.region_mode and self.selected_region:
-                for (y, x) in self.selected_region:
+            # Check if it's a relative adjustment (starts with + or -)
+            is_relative = value_str.startswith('+') or value_str.startswith('-')
+
+            if is_relative:
+                # Parse relative adjustment
+                offset = float(value_str)
+
+                if self.region_mode and self.selected_region:
+                    # Apply offset to all cells in region
+                    for (y, x) in self.selected_region:
+                        old_value = self.mesh_data[y, x]
+                        new_value = old_value + offset
+                        self.mesh_data[y, x] = new_value
+                        # Record modification in tracker
+                        if self.modification_tracker:
+                            self.modification_tracker.record_modification(y, x, old_value, new_value)
+                    self.update_status(f"Applied {offset:+.4f}mm offset to {len(self.selected_region)} points",
+                                     self.colors['accent_green'])
+                elif self.selected_point is not None:
+                    # Apply offset to single point
+                    y, x = self.selected_point
+                    old_value = self.mesh_data[y, x]
+                    new_value = old_value + offset
+                    self.mesh_data[y, x] = new_value
+                    # Record modification in tracker
+                    if self.modification_tracker:
+                        self.modification_tracker.record_modification(y, x, old_value, new_value)
+                    self.update_status(f"Applied {offset:+.4f}mm offset to point [{x}, {y}]",
+                                     self.colors['accent_green'])
+                    # Update value display to show new absolute value
+                    self.value_var.set(f"{new_value:.6f}")
+                else:
+                    messagebox.showwarning("Warning", "Please make a selection first")
+                    return
+            else:
+                # Absolute value (existing behavior)
+                new_value = float(value_str)
+
+                if self.region_mode and self.selected_region:
+                    for (y, x) in self.selected_region:
+                        old_value = self.mesh_data[y, x]
+                        self.mesh_data[y, x] = new_value
+                        # Record modification in tracker
+                        if self.modification_tracker:
+                            self.modification_tracker.record_modification(y, x, old_value, new_value)
+                    self.update_status(f"Updated {len(self.selected_region)} points to {new_value:.4f}mm",
+                                     self.colors['accent_green'])
+                elif self.selected_point is not None:
+                    y, x = self.selected_point
                     old_value = self.mesh_data[y, x]
                     self.mesh_data[y, x] = new_value
                     # Record modification in tracker
                     if self.modification_tracker:
                         self.modification_tracker.record_modification(y, x, old_value, new_value)
-                self.update_status(f"Updated {len(self.selected_region)} points to {new_value:.4f}mm",
-                                 self.colors['accent_green'])
-            elif self.selected_point is not None:
-                y, x = self.selected_point
-                old_value = self.mesh_data[y, x]
-                self.mesh_data[y, x] = new_value
-                # Record modification in tracker
-                if self.modification_tracker:
-                    self.modification_tracker.record_modification(y, x, old_value, new_value)
-                self.update_status(f"Updated point [{x}, {y}] to {new_value:.4f}mm",
-                                 self.colors['accent_green'])
-            else:
-                messagebox.showwarning("Warning", "Please make a selection first")
-                return
+                    self.update_status(f"Updated point [{x}, {y}] to {new_value:.4f}mm",
+                                     self.colors['accent_green'])
+                else:
+                    messagebox.showwarning("Warning", "Please make a selection first")
+                    return
 
             self.slider_var.set(0)
             self.is_modified = True
             self.update_plot()
             self.update_statistics()
         except ValueError:
-            messagebox.showerror("Error", "Invalid value entered")
+            messagebox.showerror("Error", "Invalid value entered. Use absolute (0.05) or relative (+0.01, -0.02)")
             self.update_status("Error: Invalid value", self.colors['accent_red'])
 
     def clear_region(self):
@@ -1808,6 +1872,27 @@ class BedLevelEditorPro:
         self.update_statistics()
         self.update_status(f"Smoothed {len(self.selected_region)} points", self.colors['accent_green'])
         messagebox.showinfo("Success", f"Smoothed {len(self.selected_region)} points")
+
+    def apply_region_offset(self, offset):
+        """Apply relative offset to all cells in selected region"""
+        if not self.selected_region:
+            messagebox.showwarning("Warning", "Please select a region first")
+            return
+
+        # Apply offset to each cell in region
+        for (y, x) in self.selected_region:
+            old_value = self.mesh_data[y, x]
+            new_value = old_value + offset
+            self.mesh_data[y, x] = new_value
+            # Record modification in tracker
+            if self.modification_tracker:
+                self.modification_tracker.record_modification(y, x, old_value, new_value)
+
+        self.is_modified = True
+        self.update_plot()
+        self.update_statistics()
+        self.update_status(f"Applied {offset:+.4f}mm offset to {len(self.selected_region)} points",
+                         self.colors['accent_green'])
 
     def toggle_modifications(self):
         """Toggle display of modification indicators"""
