@@ -16,6 +16,166 @@ import numpy as np
 from scipy import interpolate
 import re
 import os
+import json
+from datetime import datetime
+
+class MeshModificationTracker:
+    """
+    Tracks modifications to mesh cells with history support
+    Supports marking changes as "working" and maintains modification history
+    """
+    def __init__(self, original_mesh):
+        """
+        Initialize tracker with original mesh data
+
+        Args:
+            original_mesh: numpy array of original mesh values
+        """
+        self.original_mesh = original_mesh.copy()
+        self.modification_history = {}  # {(y, x): [{'value': float, 'timestamp': str, 'working': bool}]}
+        self.working_cells = set()  # Set of (y, x) tuples marked as working
+
+    def get_modified_cells(self, current_mesh, include_working=True):
+        """
+        Get list of cells that differ from original
+
+        Args:
+            current_mesh: Current mesh data
+            include_working: If False, exclude cells marked as working
+
+        Returns:
+            List of (y, x) tuples of modified cells
+        """
+        modified = []
+        for y in range(current_mesh.shape[0]):
+            for x in range(current_mesh.shape[1]):
+                if not np.isclose(current_mesh[y, x], self.original_mesh[y, x], atol=1e-6):
+                    if include_working or (y, x) not in self.working_cells:
+                        modified.append((y, x))
+        return modified
+
+    def record_modification(self, y, x, old_value, new_value):
+        """
+        Record a modification to the history
+
+        Args:
+            y: Y index
+            x: X index
+            old_value: Previous value
+            new_value: New value
+        """
+        key = (y, x)
+        if key not in self.modification_history:
+            self.modification_history[key] = []
+
+        self.modification_history[key].append({
+            'old_value': float(old_value),
+            'new_value': float(new_value),
+            'timestamp': datetime.now().isoformat(),
+            'working': False
+        })
+
+    def mark_as_working(self, cells):
+        """
+        Mark cells as working (tested and approved)
+
+        Args:
+            cells: List of (y, x) tuples
+        """
+        for cell in cells:
+            self.working_cells.add(cell)
+            # Update history to mark as working
+            if cell in self.modification_history:
+                if self.modification_history[cell]:
+                    self.modification_history[cell][-1]['working'] = True
+
+    def unmark_as_working(self, cells):
+        """
+        Remove working status from cells
+
+        Args:
+            cells: List of (y, x) tuples
+        """
+        for cell in cells:
+            self.working_cells.discard(cell)
+            if cell in self.modification_history:
+                if self.modification_history[cell]:
+                    self.modification_history[cell][-1]['working'] = False
+
+    def get_working_cells(self):
+        """Get list of cells marked as working"""
+        return list(self.working_cells)
+
+    def get_untested_cells(self, current_mesh):
+        """Get modified cells that haven't been marked as working"""
+        all_modified = self.get_modified_cells(current_mesh, include_working=True)
+        return [cell for cell in all_modified if cell not in self.working_cells]
+
+    def get_cell_history(self, y, x):
+        """
+        Get modification history for a specific cell
+
+        Returns:
+            List of modification records or empty list
+        """
+        return self.modification_history.get((y, x), [])
+
+    def reset_cell_to_original(self, y, x, current_mesh):
+        """
+        Reset a cell to its original value
+
+        Args:
+            y: Y index
+            x: X index
+            current_mesh: Current mesh to modify
+
+        Returns:
+            Original value
+        """
+        original_value = self.original_mesh[y, x]
+        current_mesh[y, x] = original_value
+
+        # Record the reset in history
+        if (y, x) in self.modification_history:
+            self.record_modification(y, x, current_mesh[y, x], original_value)
+
+        # Remove from working cells
+        self.working_cells.discard((y, x))
+
+        return original_value
+
+    def clear_history(self):
+        """Clear all modification history and working status"""
+        self.modification_history.clear()
+        self.working_cells.clear()
+
+    def update_original(self, new_original_mesh):
+        """
+        Update the original mesh (useful after saving)
+
+        Args:
+            new_original_mesh: New baseline mesh
+        """
+        self.original_mesh = new_original_mesh.copy()
+        self.clear_history()
+
+    def get_statistics(self, current_mesh):
+        """
+        Get modification statistics
+
+        Returns:
+            Dictionary with stats
+        """
+        all_modified = self.get_modified_cells(current_mesh, include_working=True)
+        untested = self.get_untested_cells(current_mesh)
+        working = self.get_working_cells()
+
+        return {
+            'total_modified': len(all_modified),
+            'working': len(working),
+            'untested': len(untested),
+            'cells': all_modified
+        }
 
 class ModernButton(tk.Button):
     """Styled button with hover effects"""
@@ -74,6 +234,10 @@ class BedLevelEditorPro:
         self.region_mode = False
         self.region_start = None
         self.is_modified = False
+
+        # Modification tracking
+        self.modification_tracker = None
+        self.show_modifications = True  # Show/hide modification indicators
 
         # Color scheme - Modern, professional palette
         self.colors = {
@@ -352,6 +516,44 @@ class BedLevelEditorPro:
                              relief=tk.FLAT, cursor='hand2')
             btn.pack(fill=tk.X, padx=10, pady=4, ipady=6)
 
+        # ===== MODIFICATION TRACKING =====
+        mod_section = self.create_section(scrollable_frame, "🎯 Modification Tracking")
+
+        # Show/hide modifications checkbox
+        self.show_mods_var = tk.BooleanVar(value=True)
+        show_check = tk.Checkbutton(mod_section, text="Show modification indicators",
+                                    variable=self.show_mods_var, command=self.toggle_modifications,
+                                    bg=self.colors['bg_light'], fg=self.colors['fg_primary'],
+                                    selectcolor=self.colors['accent_green'], font=self.fonts['normal'],
+                                    activebackground=self.colors['bg_light'], cursor='hand2')
+        show_check.pack(padx=10, pady=8, anchor=tk.W)
+
+        # Legend
+        legend_frame = tk.Frame(mod_section, bg=self.colors['bg_dark'], relief=tk.FLAT)
+        legend_frame.pack(fill=tk.X, padx=10, pady=5)
+
+        tk.Label(legend_frame, text="Legend:", font=self.fonts['small'],
+                bg=self.colors['bg_dark'], fg=self.colors['fg_secondary']).pack(anchor=tk.W, padx=5, pady=2)
+
+        tk.Label(legend_frame, text="🟧 Orange = Modified (untested)", font=self.fonts['small'],
+                bg=self.colors['bg_dark'], fg=self.colors['accent_orange']).pack(anchor=tk.W, padx=5, pady=2)
+
+        tk.Label(legend_frame, text="🟩 Green = Working (tested)", font=self.fonts['small'],
+                bg=self.colors['bg_dark'], fg=self.colors['accent_green']).pack(anchor=tk.W, padx=5, pady=2)
+
+        # Modification action buttons
+        mod_buttons = [
+            ("✓ Mark Selection as Working", self.mark_selection_as_working, self.colors['accent_green']),
+            ("✗ Unmark Selection", self.unmark_selection_as_working, self.colors['accent_orange']),
+            ("↺ Reset Selection to Original", self.reset_selection_to_original, self.colors['accent_red']),
+        ]
+
+        for text, command, color in mod_buttons:
+            btn = ModernButton(mod_section, text=text, command=command,
+                             bg=color, fg='white', font=self.fonts['normal'],
+                             relief=tk.FLAT, cursor='hand2')
+            btn.pack(fill=tk.X, padx=10, pady=4, ipady=6)
+
         # ===== STATISTICS =====
         stats_section = self.create_section(scrollable_frame, "📈 Mesh Statistics")
 
@@ -490,6 +692,9 @@ class BedLevelEditorPro:
             self.original_mesh_data = self.mesh_data.copy()
             self.y_count, self.x_count = self.mesh_data.shape
             self.is_modified = False
+
+            # Initialize modification tracker
+            self.modification_tracker = MeshModificationTracker(self.original_mesh_data)
 
             # Extract mesh parameters
             x_count_match = re.search(r'#\*#\s*x_count\s*=\s*(\d+)', content)
@@ -805,6 +1010,30 @@ class BedLevelEditorPro:
                            bbox=dict(boxstyle='round,pad=0.3', facecolor='black',
                                    alpha=0.15, edgecolor='none'))
 
+        # Highlight modified cells (if tracking enabled and show_modifications is True)
+        if self.show_modifications and self.modification_tracker:
+            modified_cells = self.modification_tracker.get_modified_cells(self.mesh_data, include_working=True)
+            working_cells = set(self.modification_tracker.get_working_cells())
+            untested_cells = set(self.modification_tracker.get_untested_cells(self.mesh_data))
+
+            for (y, x) in modified_cells:
+                if (y, x) in working_cells:
+                    # Green border for working (tested) modifications
+                    rect = Rectangle((x - 0.5, y - 0.5), 1, 1, linewidth=2,
+                                   edgecolor=self.colors['accent_green'], facecolor='none',
+                                   linestyle='-', alpha=0.6)
+                elif (y, x) in untested_cells:
+                    # Orange border for untested modifications
+                    rect = Rectangle((x - 0.5, y - 0.5), 1, 1, linewidth=2,
+                                   edgecolor=self.colors['accent_orange'], facecolor='none',
+                                   linestyle='-', alpha=0.7)
+                else:
+                    # Default orange for modified
+                    rect = Rectangle((x - 0.5, y - 0.5), 1, 1, linewidth=2,
+                                   edgecolor=self.colors['accent_orange'], facecolor='none',
+                                   linestyle='-', alpha=0.7)
+                self.ax.add_patch(rect)
+
         # Highlight selected region
         if self.selected_region:
             for (y, x) in self.selected_region:
@@ -935,12 +1164,20 @@ class BedLevelEditorPro:
 
             if self.region_mode and self.selected_region:
                 for (y, x) in self.selected_region:
+                    old_value = self.mesh_data[y, x]
                     self.mesh_data[y, x] = new_value
+                    # Record modification in tracker
+                    if self.modification_tracker:
+                        self.modification_tracker.record_modification(y, x, old_value, new_value)
                 self.update_status(f"Updated {len(self.selected_region)} points to {new_value:.4f}mm",
                                  self.colors['accent_green'])
             elif self.selected_point is not None:
                 y, x = self.selected_point
+                old_value = self.mesh_data[y, x]
                 self.mesh_data[y, x] = new_value
+                # Record modification in tracker
+                if self.modification_tracker:
+                    self.modification_tracker.record_modification(y, x, old_value, new_value)
                 self.update_status(f"Updated point [{x}, {y}] to {new_value:.4f}mm",
                                  self.colors['accent_green'])
             else:
@@ -973,7 +1210,11 @@ class BedLevelEditorPro:
 
         avg = np.mean([self.mesh_data[y, x] for y, x in self.selected_region])
         for (y, x) in self.selected_region:
+            old_value = self.mesh_data[y, x]
             self.mesh_data[y, x] = avg
+            # Record modification in tracker
+            if self.modification_tracker:
+                self.modification_tracker.record_modification(y, x, old_value, avg)
 
         self.value_var.set(f"{avg:.6f}")
         self.is_modified = True
@@ -1001,7 +1242,11 @@ class BedLevelEditorPro:
             smoothed[y, x] = np.mean(neighbors)
 
         for (y, x) in self.selected_region:
+            old_value = self.mesh_data[y, x]
             self.mesh_data[y, x] = smoothed[y, x]
+            # Record modification in tracker
+            if self.modification_tracker:
+                self.modification_tracker.record_modification(y, x, old_value, smoothed[y, x])
 
         self.is_modified = True
         self.update_plot()
@@ -1009,12 +1254,118 @@ class BedLevelEditorPro:
         self.update_status(f"Smoothed {len(self.selected_region)} points", self.colors['accent_green'])
         messagebox.showinfo("Success", f"Smoothed {len(self.selected_region)} points")
 
+    def toggle_modifications(self):
+        """Toggle display of modification indicators"""
+        self.show_modifications = self.show_mods_var.get()
+        self.update_plot()
+        status = "shown" if self.show_modifications else "hidden"
+        self.update_status(f"Modification indicators {status}", self.colors['accent_blue'])
+
+    def mark_selection_as_working(self):
+        """Mark selected cells as working (tested)"""
+        if not self.modification_tracker:
+            return
+
+        cells_to_mark = []
+
+        if self.region_mode and self.selected_region:
+            cells_to_mark = self.selected_region
+        elif self.selected_point is not None:
+            cells_to_mark = [self.selected_point]
+        else:
+            messagebox.showwarning("Warning", "Please make a selection first")
+            return
+
+        # Only mark cells that are actually modified
+        modified_cells = self.modification_tracker.get_modified_cells(self.mesh_data, include_working=True)
+        cells_to_mark = [cell for cell in cells_to_mark if cell in modified_cells]
+
+        if not cells_to_mark:
+            messagebox.showinfo("Info", "Selected cells are not modified")
+            return
+
+        self.modification_tracker.mark_as_working(cells_to_mark)
+        self.update_plot()
+        self.update_statistics()
+        self.update_status(f"Marked {len(cells_to_mark)} cells as working", self.colors['accent_green'])
+        messagebox.showinfo("Success", f"Marked {len(cells_to_mark)} cells as working (tested)")
+
+    def unmark_selection_as_working(self):
+        """Remove working status from selected cells"""
+        if not self.modification_tracker:
+            return
+
+        cells_to_unmark = []
+
+        if self.region_mode and self.selected_region:
+            cells_to_unmark = self.selected_region
+        elif self.selected_point is not None:
+            cells_to_unmark = [self.selected_point]
+        else:
+            messagebox.showwarning("Warning", "Please make a selection first")
+            return
+
+        # Only unmark cells that are actually marked as working
+        working_cells = self.modification_tracker.get_working_cells()
+        cells_to_unmark = [cell for cell in cells_to_unmark if cell in working_cells]
+
+        if not cells_to_unmark:
+            messagebox.showinfo("Info", "Selected cells are not marked as working")
+            return
+
+        self.modification_tracker.unmark_as_working(cells_to_unmark)
+        self.update_plot()
+        self.update_statistics()
+        self.update_status(f"Unmarked {len(cells_to_unmark)} cells", self.colors['accent_orange'])
+        messagebox.showinfo("Success", f"Removed working status from {len(cells_to_unmark)} cells")
+
+    def reset_selection_to_original(self):
+        """Reset selected cells to their original values"""
+        if not self.modification_tracker:
+            return
+
+        cells_to_reset = []
+
+        if self.region_mode and self.selected_region:
+            cells_to_reset = self.selected_region
+        elif self.selected_point is not None:
+            cells_to_reset = [self.selected_point]
+        else:
+            messagebox.showwarning("Warning", "Please make a selection first")
+            return
+
+        if not messagebox.askyesno("Confirm", f"Reset {len(cells_to_reset)} cells to original values?"):
+            return
+
+        # Reset each cell
+        for (y, x) in cells_to_reset:
+            self.modification_tracker.reset_cell_to_original(y, x, self.mesh_data)
+
+        self.is_modified = True
+        self.update_plot()
+        self.update_statistics()
+        self.update_status(f"Reset {len(cells_to_reset)} cells to original", self.colors['accent_green'])
+        messagebox.showinfo("Success", f"Reset {len(cells_to_reset)} cells to original values")
+
     def update_statistics(self):
         """Update statistics display"""
         if self.mesh_data is None:
             return
 
         range_val = np.max(self.mesh_data) - np.min(self.mesh_data)
+
+        # Get modification statistics if tracker is available
+        mod_stats_text = ""
+        if self.modification_tracker:
+            mod_stats = self.modification_tracker.get_statistics(self.mesh_data)
+            mod_stats_text = f"""
+╠════════════════════════════════╣
+║   MODIFICATION TRACKING        ║
+╠════════════════════════════════╣
+  Modified:   {mod_stats['total_modified']} cells
+  Working:    {mod_stats['working']} cells
+  Untested:   {mod_stats['untested']} cells
+"""
 
         stats = f"""
 ╔════════════════════════════════╗
@@ -1027,8 +1378,7 @@ class BedLevelEditorPro:
   Range:      {range_val:.6f} mm
 
   Mean:       {np.mean(self.mesh_data):.6f} mm
-  Std Dev:    {np.std(self.mesh_data):.6f} mm
-╚════════════════════════════════╝
+  Std Dev:    {np.std(self.mesh_data):.6f} mm{mod_stats_text}╚════════════════════════════════╝
         """
 
         self.stats_text.delete(1.0, tk.END)
@@ -1041,6 +1391,12 @@ class BedLevelEditorPro:
 
         if messagebox.askyesno("Confirm", "Set all points to average value?"):
             avg = np.mean(self.mesh_data)
+            # Track modifications for all cells
+            if self.modification_tracker:
+                for y in range(self.y_count):
+                    for x in range(self.x_count):
+                        old_value = self.mesh_data[y, x]
+                        self.modification_tracker.record_modification(y, x, old_value, avg)
             self.mesh_data.fill(avg)
             self.is_modified = True
             self.update_plot()
@@ -1074,6 +1430,13 @@ class BedLevelEditorPro:
         def apply_offset():
             try:
                 offset = float(offset_var.get())
+                # Track modifications for all cells
+                if self.modification_tracker:
+                    for y in range(self.y_count):
+                        for x in range(self.x_count):
+                            old_value = self.mesh_data[y, x]
+                            new_value = old_value + offset
+                            self.modification_tracker.record_modification(y, x, old_value, new_value)
                 self.mesh_data += offset
                 self.is_modified = True
                 self.update_plot()
