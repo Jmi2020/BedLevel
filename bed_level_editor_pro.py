@@ -625,14 +625,8 @@ class BedMeshTestGenerator:
                 # Clean up temp directory
                 shutil.rmtree(temp_dir, ignore_errors=True)
 
-            # Calculate center coordinate for move tool
-            center_coord = self.calculate_object_center(cells)
-
-            # Export position guide JSON
-            guide_path = filepath.replace('.3mf', '_positions.json')
-            self.export_position_guide(cells, guide_path, test_height, center_coord)
-
-            return True, guide_path, center_coord
+            # Positions are now embedded in the 3MF file, no need for external guide
+            return True, None, None
 
         except Exception as e:
             print(f"3MF export error: {e}")
@@ -2464,7 +2458,6 @@ class BedLevelEditorPro:
                     batches = [untested_cells[i:i+batch_size] for i in range(0, len(untested_cells), batch_size)]
 
                     success_count = 0
-                    guide_files = []
 
                     for idx, batch in enumerate(batches, 1):
                         batch_name = f"{print_name}_batch{idx}"
@@ -2476,8 +2469,7 @@ class BedLevelEditorPro:
                             success, guide_path, center_coord = self.test_generator.export_scene_3mf(
                                 batch, filepath, test_height=test_height
                             )
-                            if success and guide_path:
-                                guide_files.append(os.path.basename(guide_path))
+                            # guide_path is now None since positions are embedded in 3MF
                         else:
                             # Use STL with reference frame
                             success = self.test_generator.export_with_reference_frame(
@@ -2490,14 +2482,10 @@ class BedLevelEditorPro:
                     dialog.destroy()
                     self.update_status(f"Generated {success_count} batch files", self.colors['accent_green'])
 
-                    guide_info = ""
-                    if guide_files:
-                        guide_info = f"\n\nPosition guides: {len(guide_files)} JSON files"
-
                     messagebox.showinfo("Success",
                                       f"Generated {success_count} test print files\n"
                                       f"Location: {save_dir}\n"
-                                      f"Total cells: {len(untested_cells)}{guide_info}")
+                                      f"Total cells: {len(untested_cells)}")
                 else:
                     # Single file mode
                     filepath = filedialog.asksaveasfilename(
@@ -2540,9 +2528,6 @@ class BedLevelEditorPro:
                             f"Objects will be automatically placed at the correct bed positions\n"
                             f"when opened in Elegoo Slicer."
                         )
-
-                        if guide_path:
-                            success_msg += f"\n\n📄 Position guide: {os.path.basename(guide_path)}"
 
                         messagebox.showinfo("Success", success_msg)
                     else:
