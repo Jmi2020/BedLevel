@@ -177,6 +177,162 @@ class MeshModificationTracker:
             'cells': all_modified
         }
 
+class BedMeshTestGenerator:
+    """
+    Generates test print 3D models for modified mesh cells
+    Creates 2-layer (0.4mm) test squares positioned at mesh cell locations
+    """
+    def __init__(self, mesh_min, mesh_max, x_count, y_count):
+        """
+        Initialize test generator with mesh parameters
+
+        Args:
+            mesh_min: Tuple (x_min, y_min) in mm
+            mesh_max: Tuple (x_max, y_max) in mm
+            x_count: Number of X mesh points
+            y_count: Number of Y mesh points
+        """
+        self.mesh_min = mesh_min
+        self.mesh_max = mesh_max
+        self.x_count = x_count
+        self.y_count = y_count
+
+        # Calculate spacing between mesh points
+        self.x_spacing = (mesh_max[0] - mesh_min[0]) / (x_count - 1) if x_count > 1 else 0
+        self.y_spacing = (mesh_max[1] - mesh_min[1]) / (y_count - 1) if y_count > 1 else 0
+
+    def get_cell_center(self, x_index, y_index):
+        """
+        Get the physical XY coordinates of a mesh cell center
+
+        Args:
+            x_index: X grid index (0 to x_count-1)
+            y_index: Y grid index (0 to y_count-1)
+
+        Returns:
+            Tuple (x_mm, y_mm) in absolute bed coordinates
+        """
+        x_mm = self.mesh_min[0] + (x_index * self.x_spacing)
+        y_mm = self.mesh_min[1] + (y_index * self.y_spacing)
+        return (x_mm, y_mm)
+
+    def create_test_square(self, center_x, center_y, test_height=0.4, padding=2.0):
+        """
+        Create a test square mesh at the specified position
+
+        Args:
+            center_x: X coordinate in mm
+            center_y: Y coordinate in mm
+            test_height: Height in mm (default 0.4mm = 2 layers @ 0.2mm)
+            padding: Padding around square in mm (default 2mm)
+
+        Returns:
+            trimesh.Trimesh object
+        """
+        import trimesh
+
+        # Calculate square size (cell size minus padding)
+        cell_size = min(self.x_spacing, self.y_spacing) - padding
+        if cell_size <= 0:
+            cell_size = 10.0  # Fallback minimum size
+
+        # Create box centered at origin
+        box = trimesh.creation.box(extents=[cell_size, cell_size, test_height])
+
+        # Translate to position (Z at test_height/2 to sit on bed)
+        translation = [center_x, center_y, test_height / 2]
+        box.apply_translation(translation)
+
+        return box
+
+    def generate_test_print(self, cells, test_height=0.4, padding=2.0):
+        """
+        Generate a single test print mesh for multiple cells
+
+        Args:
+            cells: List of (y, x) tuples representing grid indices
+            test_height: Height of test squares in mm
+            padding: Padding around each square in mm
+
+        Returns:
+            trimesh.Trimesh object containing all test squares
+        """
+        import trimesh
+
+        meshes = []
+        for (y_idx, x_idx) in cells:
+            center_x, center_y = self.get_cell_center(x_idx, y_idx)
+            square = self.create_test_square(center_x, center_y, test_height, padding)
+            meshes.append(square)
+
+        # Combine all meshes
+        if len(meshes) == 1:
+            return meshes[0]
+        else:
+            return trimesh.util.concatenate(meshes)
+
+    def export_3mf(self, mesh, filepath, print_name="BedLevel_Test"):
+        """
+        Export mesh to 3MF format
+
+        Args:
+            mesh: trimesh.Trimesh object
+            filepath: Output file path
+            print_name: Name for the print model
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            import trimesh
+
+            # 3MF export with metadata
+            mesh.export(filepath, file_type='3mf')
+            return True
+        except Exception as e:
+            print(f"3MF export error: {e}")
+            return False
+
+    def export_stl(self, mesh, filepath):
+        """
+        Export mesh to STL format (binary)
+
+        Args:
+            mesh: trimesh.Trimesh object
+            filepath: Output file path
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # STL binary export (smaller file size)
+            mesh.export(filepath, file_type='stl')
+            return True
+        except Exception as e:
+            print(f"STL export error: {e}")
+            return False
+
+    def get_cell_info(self, cells):
+        """
+        Get descriptive information about cells
+
+        Args:
+            cells: List of (y, x) tuples
+
+        Returns:
+            List of dictionaries with cell info
+        """
+        info = []
+        for (y_idx, x_idx) in cells:
+            center_x, center_y = self.get_cell_center(x_idx, y_idx)
+            info.append({
+                'grid': f"[{x_idx}, {y_idx}]",
+                'position': f"({center_x:.1f}, {center_y:.1f})",
+                'y_idx': y_idx,
+                'x_idx': x_idx
+            })
+        return info
+
 class ModernButton(tk.Button):
     """Styled button with hover effects"""
     def __init__(self, parent, **kwargs):
@@ -238,6 +394,9 @@ class BedLevelEditorPro:
         # Modification tracking
         self.modification_tracker = None
         self.show_modifications = True  # Show/hide modification indicators
+
+        # Test print generation
+        self.test_generator = BedMeshTestGenerator(self.mesh_min, self.mesh_max, self.x_count, self.y_count)
 
         # Color scheme - Modern, professional palette
         self.colors = {
@@ -554,6 +713,15 @@ class BedLevelEditorPro:
                              relief=tk.FLAT, cursor='hand2')
             btn.pack(fill=tk.X, padx=10, pady=4, ipady=6)
 
+        # Test print generation button (prominent)
+        tk.Frame(mod_section, height=10, bg=self.colors['bg_light']).pack()  # Spacer
+
+        test_print_btn = ModernButton(mod_section, text="🖨️ GENERATE TEST PRINT",
+                                     command=self.open_test_print_dialog,
+                                     bg=self.colors['accent_blue'], fg='white',
+                                     font=self.fonts['heading'], relief=tk.FLAT, cursor='hand2')
+        test_print_btn.pack(fill=tk.X, padx=10, pady=8, ipady=10)
+
         # ===== STATISTICS =====
         stats_section = self.create_section(scrollable_frame, "📈 Mesh Statistics")
 
@@ -708,6 +876,9 @@ class BedLevelEditorPro:
                 self.y_count = int(y_count_match.group(1))
             if mesh_x_pps_match and mesh_y_pps_match:
                 self.mesh_pps = (int(mesh_x_pps_match.group(1)), int(mesh_y_pps_match.group(1)))
+
+            # Update test generator with current mesh parameters
+            self.test_generator = BedMeshTestGenerator(self.mesh_min, self.mesh_max, self.x_count, self.y_count)
 
             self.update_plot()
             self.update_statistics()
@@ -1346,6 +1517,248 @@ class BedLevelEditorPro:
         self.update_statistics()
         self.update_status(f"Reset {len(cells_to_reset)} cells to original", self.colors['accent_green'])
         messagebox.showinfo("Success", f"Reset {len(cells_to_reset)} cells to original values")
+
+    def open_test_print_dialog(self):
+        """Open dialog for test print generation"""
+        if not self.modification_tracker:
+            messagebox.showwarning("Warning", "No modification tracker available")
+            return
+
+        # Get untested cells
+        untested_cells = self.modification_tracker.get_untested_cells(self.mesh_data)
+
+        if not untested_cells:
+            response = messagebox.askyesno("No Untested Modifications",
+                                          "No untested modifications found.\n\n"
+                                          "Would you like to generate test prints for all modified cells instead?")
+            if response:
+                untested_cells = self.modification_tracker.get_modified_cells(self.mesh_data, include_working=True)
+            else:
+                return
+
+        if not untested_cells:
+            messagebox.showinfo("Info", "No modified cells to generate test prints for.")
+            return
+
+        # Create dialog
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Generate Test Print")
+        dialog.geometry("700x650")
+        dialog.configure(bg=self.colors['bg_dark'])
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        # Main frame with padding
+        main_frame = tk.Frame(dialog, bg=self.colors['bg_dark'])
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+
+        # Title
+        tk.Label(main_frame, text="🖨️ Generate Test Print", font=self.fonts['title'],
+                bg=self.colors['bg_dark'], fg=self.colors['fg_primary']).pack(pady=(0, 15))
+
+        # Warning if many cells
+        if len(untested_cells) > 10:
+            warning_frame = tk.Frame(main_frame, bg=self.colors['accent_orange'], relief=tk.FLAT, bd=2)
+            warning_frame.pack(fill=tk.X, pady=(0, 15))
+
+            tk.Label(warning_frame, text=f"⚠️  Warning: {len(untested_cells)} cells selected",
+                    font=self.fonts['heading'], bg=self.colors['accent_orange'],
+                    fg='white').pack(pady=8)
+
+            tk.Label(warning_frame, text="Consider batching into multiple prints for easier testing",
+                    font=self.fonts['small'], bg=self.colors['accent_orange'],
+                    fg='white').pack(pady=(0, 8))
+
+        # Cells list frame
+        cells_frame = tk.LabelFrame(main_frame, text="Modified Cells", font=self.fonts['heading'],
+                                   bg=self.colors['bg_medium'], fg=self.colors['fg_primary'],
+                                   relief=tk.FLAT, bd=2)
+        cells_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 15))
+
+        # Scrollable list of cells
+        list_canvas = tk.Canvas(cells_frame, bg=self.colors['bg_dark'], highlightthickness=0, height=200)
+        scrollbar = tk.Scrollbar(cells_frame, orient="vertical", command=list_canvas.yview)
+        list_frame = tk.Frame(list_canvas, bg=self.colors['bg_dark'])
+
+        list_frame.bind("<Configure>", lambda e: list_canvas.configure(scrollregion=list_canvas.bbox("all")))
+        list_canvas.create_window((0, 0), window=list_frame, anchor="nw")
+        list_canvas.configure(yscrollcommand=scrollbar.set)
+
+        list_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=10, pady=10)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y, pady=10)
+
+        # Display cell information
+        cell_info = self.test_generator.get_cell_info(untested_cells)
+        for info in cell_info:
+            cell_text = f"Grid {info['grid']} → Position {info['position']} mm"
+            tk.Label(list_frame, text=cell_text, font=self.fonts['mono'],
+                    bg=self.colors['bg_dark'], fg=self.colors['fg_secondary'],
+                    anchor='w').pack(fill=tk.X, pady=2, padx=5)
+
+        # Configuration frame
+        config_frame = tk.LabelFrame(main_frame, text="Configuration", font=self.fonts['heading'],
+                                     bg=self.colors['bg_medium'], fg=self.colors['fg_primary'],
+                                     relief=tk.FLAT, bd=2)
+        config_frame.pack(fill=tk.X, pady=(0, 15))
+
+        config_inner = tk.Frame(config_frame, bg=self.colors['bg_medium'])
+        config_inner.pack(fill=tk.X, padx=15, pady=15)
+
+        # Print name
+        tk.Label(config_inner, text="Print Name:", font=self.fonts['normal'],
+                bg=self.colors['bg_medium'], fg=self.colors['fg_primary']).grid(row=0, column=0, sticky='w', pady=5)
+
+        name_var = tk.StringVar(value=f"BedLevel_Test_{len(untested_cells)}cells")
+        name_entry = tk.Entry(config_inner, textvariable=name_var, font=self.fonts['normal'],
+                             bg=self.colors['bg_dark'], fg=self.colors['fg_primary'], width=30)
+        name_entry.grid(row=0, column=1, sticky='ew', pady=5, padx=(10, 0))
+
+        # Layer height
+        tk.Label(config_inner, text="Layer Height (mm):", font=self.fonts['normal'],
+                bg=self.colors['bg_medium'], fg=self.colors['fg_primary']).grid(row=1, column=0, sticky='w', pady=5)
+
+        layer_var = tk.StringVar(value="0.2")
+        layer_entry = tk.Entry(config_inner, textvariable=layer_var, font=self.fonts['normal'],
+                              bg=self.colors['bg_dark'], fg=self.colors['fg_primary'], width=30)
+        layer_entry.grid(row=1, column=1, sticky='ew', pady=5, padx=(10, 0))
+
+        # Test height (layers)
+        tk.Label(config_inner, text="Test Layers:", font=self.fonts['normal'],
+                bg=self.colors['bg_medium'], fg=self.colors['fg_primary']).grid(row=2, column=0, sticky='w', pady=5)
+
+        layers_var = tk.StringVar(value="2")
+        layers_entry = tk.Entry(config_inner, textvariable=layers_var, font=self.fonts['normal'],
+                               bg=self.colors['bg_dark'], fg=self.colors['fg_primary'], width=30)
+        layers_entry.grid(row=2, column=1, sticky='ew', pady=5, padx=(10, 0))
+
+        # Format selection
+        tk.Label(config_inner, text="Export Format:", font=self.fonts['normal'],
+                bg=self.colors['bg_medium'], fg=self.colors['fg_primary']).grid(row=3, column=0, sticky='w', pady=5)
+
+        format_var = tk.StringVar(value="3mf")
+        format_frame = tk.Frame(config_inner, bg=self.colors['bg_medium'])
+        format_frame.grid(row=3, column=1, sticky='w', pady=5, padx=(10, 0))
+
+        tk.Radiobutton(format_frame, text="3MF (recommended)", variable=format_var, value="3mf",
+                      bg=self.colors['bg_medium'], fg=self.colors['fg_primary'],
+                      selectcolor=self.colors['accent_blue'], font=self.fonts['normal'],
+                      activebackground=self.colors['bg_medium']).pack(side=tk.LEFT, padx=(0, 15))
+
+        tk.Radiobutton(format_frame, text="STL", variable=format_var, value="stl",
+                      bg=self.colors['bg_medium'], fg=self.colors['fg_primary'],
+                      selectcolor=self.colors['accent_blue'], font=self.fonts['normal'],
+                      activebackground=self.colors['bg_medium']).pack(side=tk.LEFT)
+
+        config_inner.columnconfigure(1, weight=1)
+
+        # Batch generation option (if >10 cells)
+        batch_var = tk.BooleanVar(value=False)
+        if len(untested_cells) > 10:
+            batch_check = tk.Checkbutton(config_frame, text="Split into multiple files (max 10 cells per file)",
+                                        variable=batch_var, bg=self.colors['bg_medium'],
+                                        fg=self.colors['fg_primary'], selectcolor=self.colors['accent_blue'],
+                                        font=self.fonts['normal'], activebackground=self.colors['bg_medium'])
+            batch_check.pack(padx=15, pady=(0, 10))
+
+        # Button frame
+        button_frame = tk.Frame(main_frame, bg=self.colors['bg_dark'])
+        button_frame.pack(fill=tk.X)
+
+        def generate_print():
+            try:
+                # Get configuration
+                print_name = name_var.get().strip()
+                if not print_name:
+                    print_name = "BedLevel_Test"
+
+                layer_height = float(layer_var.get())
+                test_layers = int(layers_var.get())
+                test_height = layer_height * test_layers
+                file_format = format_var.get()
+                batch_mode = batch_var.get()
+
+                # Ask for save location
+                extension = "3mf" if file_format == "3mf" else "stl"
+                filetypes = [("3MF files", "*.3mf")] if file_format == "3mf" else [("STL files", "*.stl")]
+
+                if batch_mode and len(untested_cells) > 10:
+                    # Batch mode - ask for directory
+                    from tkinter import filedialog
+                    save_dir = filedialog.askdirectory(title="Select directory for batch files")
+                    if not save_dir:
+                        return
+
+                    # Split into batches of 10
+                    batch_size = 10
+                    batches = [untested_cells[i:i+batch_size] for i in range(0, len(untested_cells), batch_size)]
+
+                    success_count = 0
+                    for idx, batch in enumerate(batches, 1):
+                        batch_name = f"{print_name}_batch{idx}"
+                        filepath = os.path.join(save_dir, f"{batch_name}.{extension}")
+
+                        # Generate and export
+                        mesh = self.test_generator.generate_test_print(batch, test_height=test_height)
+
+                        if file_format == "3mf":
+                            success = self.test_generator.export_3mf(mesh, filepath, batch_name)
+                        else:
+                            success = self.test_generator.export_stl(mesh, filepath)
+
+                        if success:
+                            success_count += 1
+
+                    dialog.destroy()
+                    self.update_status(f"Generated {success_count} batch files", self.colors['accent_green'])
+                    messagebox.showinfo("Success",
+                                      f"Generated {success_count} test print files\n"
+                                      f"Location: {save_dir}\n"
+                                      f"Total cells: {len(untested_cells)}")
+                else:
+                    # Single file mode
+                    filepath = filedialog.asksaveasfilename(
+                        defaultextension=f".{extension}",
+                        filetypes=filetypes,
+                        initialfile=f"{print_name}.{extension}",
+                        title="Save Test Print"
+                    )
+
+                    if not filepath:
+                        return
+
+                    # Generate and export
+                    mesh = self.test_generator.generate_test_print(untested_cells, test_height=test_height)
+
+                    if file_format == "3mf":
+                        success = self.test_generator.export_3mf(mesh, filepath, print_name)
+                    else:
+                        success = self.test_generator.export_stl(mesh, filepath)
+
+                    if success:
+                        dialog.destroy()
+                        self.update_status(f"Test print saved: {os.path.basename(filepath)}",
+                                         self.colors['accent_green'])
+                        messagebox.showinfo("Success",
+                                          f"Test print generated successfully!\n\n"
+                                          f"File: {os.path.basename(filepath)}\n"
+                                          f"Cells: {len(untested_cells)}\n"
+                                          f"Height: {test_height:.2f}mm ({test_layers} layers)")
+                    else:
+                        messagebox.showerror("Error", "Failed to export test print")
+
+            except ValueError as e:
+                messagebox.showerror("Error", f"Invalid input: {str(e)}")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to generate test print: {str(e)}")
+
+        # Buttons
+        ModernButton(button_frame, text="✓ Generate", command=generate_print,
+                    bg=self.colors['accent_green'], fg='white', font=self.fonts['heading'],
+                    relief=tk.FLAT, cursor='hand2', width=15).pack(side=tk.LEFT, padx=5, ipady=8)
+
+        ModernButton(button_frame, text="✗ Cancel", command=dialog.destroy,
+                    bg=self.colors['accent_red'], fg='white', font=self.fonts['heading'],
+                    relief=tk.FLAT, cursor='hand2', width=15).pack(side=tk.LEFT, padx=5, ipady=8)
 
     def update_statistics(self):
         """Update statistics display"""
