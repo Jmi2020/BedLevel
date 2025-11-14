@@ -333,26 +333,45 @@ class BedMeshTestGenerator:
             })
         return info
 
-class ModernButton(tk.Button):
-    """Styled button with hover effects"""
-    def __init__(self, parent, **kwargs):
-        # Get the desired background color before modifying kwargs
-        self.default_bg = kwargs.get('bg', '#4a90e2')
-        self.default_fg = kwargs.get('fg', 'white')
-        self.hover_bg = self.lighten_color(self.default_bg)
+class ModernButton(tk.Frame):
+    """Custom button using Frame - complete control, no tkinter Button issues"""
+    def __init__(self, parent, text="", command=None, bg='#4a90e2', fg='white',
+                 font=None, width=None, height=None, cursor='hand2', **kwargs):
+        super().__init__(parent, bg=bg, highlightthickness=0, **kwargs)
 
-        # Set all color states explicitly to prevent system defaults
-        kwargs['fg'] = self.default_fg
-        kwargs['bg'] = self.default_bg
-        kwargs['activeforeground'] = self.default_fg
-        kwargs['activebackground'] = self.default_bg  # Same as bg when clicked
-        kwargs['highlightthickness'] = 0  # Remove focus border
-        kwargs['borderwidth'] = 0  # Remove border
+        # Store properties
+        self.default_bg = bg
+        self.default_fg = fg
+        self.hover_bg = self.lighten_color(bg)
+        self.command = command
+        self.text = text
 
-        super().__init__(parent, **kwargs)
+        # Create label inside frame
+        self.label = tk.Label(
+            self,
+            text=text,
+            bg=bg,
+            fg=fg,
+            font=font,
+            cursor=cursor,
+            highlightthickness=0,
+            borderwidth=0
+        )
 
-        self.bind('<Enter>', self.on_enter)
-        self.bind('<Leave>', self.on_leave)
+        # Apply width/height if specified
+        if width:
+            self.label.config(width=width)
+        if height:
+            self.label.config(height=height)
+
+        self.label.pack(fill=tk.BOTH, expand=True, padx=kwargs.get('padx', 10),
+                       pady=kwargs.get('pady', 5), ipady=kwargs.get('ipady', 0))
+
+        # Bind events to both frame and label
+        for widget in (self, self.label):
+            widget.bind('<Enter>', self._on_enter)
+            widget.bind('<Leave>', self._on_leave)
+            widget.bind('<Button-1>', self._on_click)
 
     def lighten_color(self, hex_color):
         """Lighten a hex color by 20%"""
@@ -363,17 +382,48 @@ class ModernButton(tk.Button):
         b = min(255, int(b * 1.2))
         return f'#{r:02x}{g:02x}{b:02x}'
 
-    def on_enter(self, e):
-        self.config(bg=self.hover_bg, activebackground=self.hover_bg)
+    def _on_enter(self, event):
+        """Handle mouse enter"""
+        self.config(bg=self.hover_bg)
+        self.label.config(bg=self.hover_bg)
 
-    def on_leave(self, e):
-        self.config(bg=self.default_bg, activebackground=self.default_bg)
+    def _on_leave(self, event):
+        """Handle mouse leave"""
+        self.config(bg=self.default_bg)
+        self.label.config(bg=self.default_bg)
+
+    def _on_click(self, event):
+        """Handle click"""
+        if self.command:
+            self.command()
+
+    def config(self, **kwargs):
+        """Override config to handle both frame and label"""
+        # Handle bg specially
+        if 'bg' in kwargs:
+            super().config(bg=kwargs['bg'])
+            if hasattr(self, 'label'):
+                self.label.config(bg=kwargs['bg'])
+        # Pass other configs to parent
+        super().config(**{k: v for k, v in kwargs.items() if k != 'bg'})
+
+    def pack(self, **kwargs):
+        """Override pack to handle properly"""
+        # Remove padx/pady/ipady if present (we handle them internally)
+        kwargs.pop('padx', None)
+        kwargs.pop('pady', None)
+        kwargs.pop('ipady', None)
+        super().pack(**kwargs)
 
 class BedLevelEditorPro:
     def __init__(self, root):
         self.root = root
         self.root.title("Bed Level Editor Pro - Elegoo OrangeStorm Giga")
         self.root.geometry("1680x980")
+
+        # Make window resizable with minimum size constraints
+        self.root.resizable(True, True)
+        self.root.minsize(1200, 800)  # Minimum size to prevent UI breaking
 
         self.config_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "printer.cfg")
         self.mesh_data = None
