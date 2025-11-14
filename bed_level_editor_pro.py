@@ -1746,9 +1746,11 @@ class BedLevelEditorPro:
                 extension = "3mf" if file_format == "3mf" else "stl"
                 filetypes = [("3MF files", "*.3mf")] if file_format == "3mf" else [("STL files", "*.stl")]
 
+                # Import filedialog (used in both batch and single mode)
+                from tkinter import filedialog
+
                 if batch_mode and len(untested_cells) > 10:
                     # Batch mode - ask for directory
-                    from tkinter import filedialog
                     save_dir = filedialog.askdirectory(title="Select directory for batch files")
                     if not save_dir:
                         return
