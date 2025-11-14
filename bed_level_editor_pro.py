@@ -20,16 +20,20 @@ import os
 class ModernButton(tk.Button):
     """Styled button with hover effects"""
     def __init__(self, parent, **kwargs):
-        # Ensure white text by default
-        if 'fg' not in kwargs:
-            kwargs['fg'] = 'white'
-        if 'activeforeground' not in kwargs:
-            kwargs['activeforeground'] = 'white'
-
-        super().__init__(parent, **kwargs)
+        # Get the desired background color before modifying kwargs
         self.default_bg = kwargs.get('bg', '#4a90e2')
         self.default_fg = kwargs.get('fg', 'white')
         self.hover_bg = self.lighten_color(self.default_bg)
+
+        # Set all color states explicitly to prevent system defaults
+        kwargs['fg'] = self.default_fg
+        kwargs['bg'] = self.default_bg
+        kwargs['activeforeground'] = self.default_fg
+        kwargs['activebackground'] = self.default_bg  # Same as bg when clicked
+        kwargs['highlightthickness'] = 0  # Remove focus border
+        kwargs['borderwidth'] = 0  # Remove border
+
+        super().__init__(parent, **kwargs)
 
         self.bind('<Enter>', self.on_enter)
         self.bind('<Leave>', self.on_leave)
@@ -44,10 +48,10 @@ class ModernButton(tk.Button):
         return f'#{r:02x}{g:02x}{b:02x}'
 
     def on_enter(self, e):
-        self.config(bg=self.hover_bg, fg=self.default_fg)
+        self.config(bg=self.hover_bg, activebackground=self.hover_bg)
 
     def on_leave(self, e):
-        self.config(bg=self.default_bg, fg=self.default_fg)
+        self.config(bg=self.default_bg, activebackground=self.default_bg)
 
 class BedLevelEditorPro:
     def __init__(self, root):
