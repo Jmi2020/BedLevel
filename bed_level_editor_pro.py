@@ -496,9 +496,13 @@ class BedMeshTestGenerator:
                 # Create build section
                 build = ET.SubElement(root, '{%s}build' % ns)
 
+                # Track relationships for 3D/_rels/3dmodel.model.rels file
+                relationships = []
+
                 # Generate each test square
-                mesh_object_id = 1  # ID for mesh objects in separate files
-                wrapper_object_id = 2  # ID for wrapper objects in main file (even numbers)
+                mesh_object_id = 1  # ID for mesh objects in separate files (always 1 inside each file)
+                component_object_id = 1  # ID used to reference external objects (1, 3, 5, 7...)
+                wrapper_object_id = 2  # ID for wrapper objects in main file (2, 4, 6, 8...)
 
                 for idx, (y_idx, x_idx) in enumerate(sorted(cells), 1):
                     # Get position for this cell
@@ -547,15 +551,19 @@ class BedMeshTestGenerator:
                     obj_tree = ET.ElementTree(obj_root)
                     obj_tree.write(mesh_path, encoding='UTF-8', xml_declaration=True)
 
+                    # Add relationship entry for this external file
+                    relationships.append((idx, mesh_filename))
+
                     # Create wrapper object in main file that references the external mesh
                     wrapper_obj = ET.SubElement(resources, '{%s}object' % ns)
                     wrapper_obj.set('id', str(wrapper_object_id))
                     wrapper_obj.set('type', 'model')
 
                     # Add component that references the external file
+                    # Use component_object_id which will be resolved via relationships file
                     components = ET.SubElement(wrapper_obj, '{%s}components' % ns)
                     component = ET.SubElement(components, '{%s}component' % ns)
-                    component.set('objectid', str(mesh_object_id))
+                    component.set('objectid', str(component_object_id))
                     component.set('{http://schemas.microsoft.com/3dmanufacturing/production/2015/06}path',
                                 f'/3D/Objects/{mesh_filename}')
                     component.set('transform', '1 0 0 0 1 0 0 0 1 0 0 0')  # Identity transform
@@ -565,13 +573,26 @@ class BedMeshTestGenerator:
                     item = ET.SubElement(build, '{%s}item' % ns)
                     item.set('objectid', str(wrapper_object_id))
                     item.set('transform', transform)
+                    item.set('printable', '1')
 
-                    wrapper_object_id += 2  # Increment by 2 to keep even numbers
+                    wrapper_object_id += 2  # Increment by 2 to keep even numbers (2, 4, 6, 8...)
+                    component_object_id += 2  # Increment by 2 to keep odd numbers (1, 3, 5, 7...)
 
                 # Write main 3dmodel.model file
                 tree = ET.ElementTree(root)
                 model_path = os.path.join(temp_dir, '3D', '3dmodel.model')
                 tree.write(model_path, encoding='UTF-8', xml_declaration=True)
+
+                # Create 3D/_rels/3dmodel.model.rels to declare relationships to external object files
+                model_rels_dir = os.path.join(temp_dir, '3D', '_rels')
+                os.makedirs(model_rels_dir, exist_ok=True)
+                model_rels_path = os.path.join(model_rels_dir, '3dmodel.model.rels')
+                with open(model_rels_path, 'w') as f:
+                    f.write('<?xml version="1.0" encoding="UTF-8"?>\n')
+                    f.write('<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">\n')
+                    for rel_id, rel_filename in relationships:
+                        f.write(f' <Relationship Target="/3D/Objects/{rel_filename}" Id="rel-{rel_id}" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/>\n')
+                    f.write('</Relationships>\n')
 
                 # Create [Content_Types].xml
                 content_types_path = os.path.join(temp_dir, '[Content_Types].xml')
