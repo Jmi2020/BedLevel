@@ -333,6 +333,284 @@ class BedMeshTestGenerator:
             })
         return info
 
+    def generate_test_squares_scene(self, cells, test_height=0.4, padding=2.0):
+        """
+        Generate a trimesh Scene with separate test squares at correct positions.
+        This preserves individual object positions for Elegoo Slicer.
+
+        Args:
+            cells: List of (y, x) tuples representing grid indices
+            test_height: Height of test squares in mm
+            padding: Padding around each square in mm
+
+        Returns:
+            trimesh.Scene with positioned test squares
+        """
+        import trimesh
+        import numpy as np
+
+        if not cells:
+            raise ValueError("No cells provided for test print generation")
+
+        scene = trimesh.Scene()
+
+        # Calculate square size
+        cell_size = min(self.x_spacing, self.y_spacing) - padding
+        if cell_size < 5.0:
+            print(f"Warning: Cell size {cell_size:.1f}mm is small. Consider reducing padding.")
+            cell_size = max(cell_size, 5.0)
+
+        for (y_idx, x_idx) in sorted(cells):
+            # Get center position for this cell
+            center_x, center_y = self.get_cell_center(x_idx, y_idx)
+
+            # Create box at ORIGIN first (important for transforms)
+            box = trimesh.creation.box(extents=[cell_size, cell_size, test_height])
+
+            # Create 4x4 transformation matrix
+            # This tells Elegoo Slicer exactly where to place the object
+            transform = np.eye(4)
+            transform[0, 3] = center_x  # X translation
+            transform[1, 3] = center_y  # Y translation
+            transform[2, 3] = test_height / 2  # Z translation (half height so base at Z=0)
+
+            # Create unique node name for this test square
+            node_name = f"mesh_test_r{y_idx:02d}_c{x_idx:02d}"
+
+            # Add metadata to the mesh itself
+            box.metadata['cell_row'] = y_idx
+            box.metadata['cell_col'] = x_idx
+            box.metadata['position_x_mm'] = float(center_x)
+            box.metadata['position_y_mm'] = float(center_y)
+            box.metadata['cell_size_mm'] = float(cell_size)
+            box.metadata['grid_index'] = f"[{x_idx}, {y_idx}]"
+
+            # Add to scene with transform
+            scene.add_geometry(
+                box,
+                node_name=node_name,
+                geom_name=node_name,
+                transform=transform
+            )
+
+        # Add scene-level metadata
+        scene.metadata['title'] = 'Klipper Bed Mesh Test Print'
+        scene.metadata['generator'] = 'BedLevelEditorPro'
+        scene.metadata['num_test_squares'] = len(cells)
+        scene.metadata['mesh_min'] = list(self.mesh_min)
+        scene.metadata['mesh_max'] = list(self.mesh_max)
+        scene.metadata['test_height_mm'] = float(test_height)
+        scene.metadata['square_size_mm'] = float(cell_size)
+
+        return scene
+
+    def export_scene_3mf(self, cells, filepath, test_height=0.4, padding=2.0):
+        """
+        Export 3MF scene optimized for Elegoo Slicer with preserved positions.
+
+        Args:
+            cells: List of (y, x) tuples
+            filepath: Output file path
+            test_height: Height of test squares in mm
+            padding: Padding around each square in mm
+
+        Returns:
+            Tuple (success: bool, position_guide_path: str or None)
+        """
+        try:
+            # Generate scene with positioned objects
+            scene = self.generate_test_squares_scene(cells, test_height, padding)
+
+            # Ensure .3mf extension
+            if not filepath.endswith('.3mf'):
+                filepath = f'{filepath}.3mf'
+
+            # Export scene (trimesh will write individual objects with transform matrices)
+            scene.export(filepath, file_type='3mf')
+
+            # Export position guide JSON
+            guide_path = filepath.replace('.3mf', '_positions.json')
+            self.export_position_guide(cells, guide_path, test_height)
+
+            return True, guide_path
+
+        except Exception as e:
+            print(f"Scene 3MF export error: {e}")
+            return False, None
+
+    def export_position_guide(self, cells, filepath, test_height=0.4):
+        """
+        Export JSON file with position information for verification.
+
+        Args:
+            cells: List of (y, x) tuples
+            filepath: Output JSON file path
+            test_height: Height of test squares in mm
+        """
+        import json
+
+        cell_info = []
+        for (y_idx, x_idx) in sorted(cells):
+            center_x, center_y = self.get_cell_center(x_idx, y_idx)
+            cell_info.append({
+                'grid_index': [x_idx, y_idx],
+                'position_mm': [round(center_x, 2), round(center_y, 2)],
+                'row': y_idx,
+                'col': x_idx
+            })
+
+        guide_data = {
+            'mesh_config': {
+                'mesh_min': list(self.mesh_min),
+                'mesh_max': list(self.mesh_max),
+                'x_count': self.x_count,
+                'y_count': self.y_count,
+                'x_spacing': round(self.x_spacing, 2),
+                'y_spacing': round(self.y_spacing, 2)
+            },
+            'test_print': {
+                'num_squares': len(cells),
+                'test_height_mm': test_height,
+                'square_size_mm': round(min(self.x_spacing, self.y_spacing) - 2.0, 2)
+            },
+            'modified_cells': cell_info,
+            'instructions': {
+                'elegoo_slicer': [
+                    '1. Open Elegoo Slicer',
+                    '2. File → Open Project (NOT Add Model)',
+                    '3. Select the .3mf file',
+                    '4. For EACH imported object:',
+                    '   - Right-click on object',
+                    '   - UNCHECK "Center Object" if checked',
+                    '   - Verify position matches this JSON file',
+                    '   - Right-click → Lock Placement',
+                    '5. Slice and generate G-code',
+                    '6. Print and verify first layer adhesion'
+                ],
+                'troubleshooting': {
+                    'objects_centered': 'Uncheck "Center Object" in Move tool',
+                    'objects_off_bed': 'Verify Klipper mesh_min/mesh_max match printer bed size',
+                    'cant_move_objects': 'Must uncheck "Center Object" first',
+                    'positions_reset': 'Lock placement (right-click → Lock) before slicing'
+                }
+            }
+        }
+
+        with open(filepath, 'w') as f:
+            json.dump(guide_data, f, indent=2)
+
+    def create_reference_frame(self, test_height=0.4):
+        """
+        Create a thin frame around the mesh boundaries.
+        Helps visualize the bed coordinate system in slicer.
+
+        Args:
+            test_height: Height of frame in mm
+
+        Returns:
+            trimesh.Trimesh object
+        """
+        import trimesh
+
+        frame_width = 2.0  # Width of frame lines
+        frame_meshes = []
+
+        # Bottom edge
+        bottom = trimesh.creation.box(
+            extents=[self.mesh_max[0] - self.mesh_min[0], frame_width, test_height]
+        )
+        bottom.apply_translation([
+            (self.mesh_min[0] + self.mesh_max[0]) / 2,
+            self.mesh_min[1],
+            test_height / 2
+        ])
+        frame_meshes.append(bottom)
+
+        # Top edge
+        top = trimesh.creation.box(
+            extents=[self.mesh_max[0] - self.mesh_min[0], frame_width, test_height]
+        )
+        top.apply_translation([
+            (self.mesh_min[0] + self.mesh_max[0]) / 2,
+            self.mesh_max[1],
+            test_height / 2
+        ])
+        frame_meshes.append(top)
+
+        # Left edge
+        left = trimesh.creation.box(
+            extents=[frame_width, self.mesh_max[1] - self.mesh_min[1], test_height]
+        )
+        left.apply_translation([
+            self.mesh_min[0],
+            (self.mesh_min[1] + self.mesh_max[1]) / 2,
+            test_height / 2
+        ])
+        frame_meshes.append(left)
+
+        # Right edge
+        right = trimesh.creation.box(
+            extents=[frame_width, self.mesh_max[1] - self.mesh_min[1], test_height]
+        )
+        right.apply_translation([
+            self.mesh_max[0],
+            (self.mesh_min[1] + self.mesh_max[1]) / 2,
+            test_height / 2
+        ])
+        frame_meshes.append(right)
+
+        return trimesh.util.concatenate(frame_meshes)
+
+    def export_with_reference_frame(self, cells, filepath, test_height=0.4, padding=2.0, add_frame=True):
+        """
+        Export STL with optional reference frame showing bed boundaries.
+        Use this if 3MF positioning doesn't work in Elegoo Slicer.
+
+        Args:
+            cells: List of (y, x) tuples
+            filepath: Output file path
+            test_height: Height in mm
+            padding: Padding around squares in mm
+            add_frame: If True, adds frame around bed edges
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            import trimesh
+
+            meshes = []
+
+            # Generate test squares
+            for (y_idx, x_idx) in cells:
+                center_x, center_y = self.get_cell_center(x_idx, y_idx)
+                square = self.create_test_square(center_x, center_y, test_height, padding)
+                meshes.append(square)
+
+            # Add reference frame if requested
+            if add_frame:
+                frame = self.create_reference_frame(test_height)
+                meshes.append(frame)
+
+            # Combine all meshes
+            if len(meshes) == 1:
+                combined = meshes[0]
+            else:
+                combined = trimesh.util.concatenate(meshes)
+
+            # Ensure .stl extension
+            if not filepath.endswith('.stl'):
+                filepath = f'{filepath}.stl'
+
+            # Export to STL
+            combined.export(filepath, file_type='stl')
+
+            return True
+
+        except Exception as e:
+            print(f"STL export with frame error: {e}")
+            return False
+
 class ModernButton(tk.Frame):
     """Custom button using Frame - complete control, no tkinter Button issues"""
     def __init__(self, parent, text="", command=None, bg='#4a90e2', fg='white',
@@ -1760,27 +2038,40 @@ class BedLevelEditorPro:
                     batches = [untested_cells[i:i+batch_size] for i in range(0, len(untested_cells), batch_size)]
 
                     success_count = 0
+                    guide_files = []
+
                     for idx, batch in enumerate(batches, 1):
                         batch_name = f"{print_name}_batch{idx}"
                         filepath = os.path.join(save_dir, f"{batch_name}.{extension}")
 
-                        # Generate and export
-                        mesh = self.test_generator.generate_test_print(batch, test_height=test_height)
-
+                        # Generate and export using scene-based methods
                         if file_format == "3mf":
-                            success = self.test_generator.export_3mf(mesh, filepath, batch_name)
+                            # Use scene export for positioned objects
+                            success, guide_path = self.test_generator.export_scene_3mf(
+                                batch, filepath, test_height=test_height
+                            )
+                            if success and guide_path:
+                                guide_files.append(os.path.basename(guide_path))
                         else:
-                            success = self.test_generator.export_stl(mesh, filepath)
+                            # Use STL with reference frame
+                            success = self.test_generator.export_with_reference_frame(
+                                batch, filepath, test_height=test_height, add_frame=True
+                            )
 
                         if success:
                             success_count += 1
 
                     dialog.destroy()
                     self.update_status(f"Generated {success_count} batch files", self.colors['accent_green'])
+
+                    guide_info = ""
+                    if guide_files:
+                        guide_info = f"\n\nPosition guides: {len(guide_files)} JSON files"
+
                     messagebox.showinfo("Success",
                                       f"Generated {success_count} test print files\n"
                                       f"Location: {save_dir}\n"
-                                      f"Total cells: {len(untested_cells)}")
+                                      f"Total cells: {len(untested_cells)}{guide_info}")
                 else:
                     # Single file mode
                     filepath = filedialog.asksaveasfilename(
@@ -1793,23 +2084,39 @@ class BedLevelEditorPro:
                     if not filepath:
                         return
 
-                    # Generate and export
-                    mesh = self.test_generator.generate_test_print(untested_cells, test_height=test_height)
-
+                    # Generate and export using scene-based methods
+                    guide_path = None
                     if file_format == "3mf":
-                        success = self.test_generator.export_3mf(mesh, filepath, print_name)
+                        # Use scene export for positioned objects
+                        success, guide_path = self.test_generator.export_scene_3mf(
+                            untested_cells, filepath, test_height=test_height
+                        )
                     else:
-                        success = self.test_generator.export_stl(mesh, filepath)
+                        # Use STL with reference frame
+                        success = self.test_generator.export_with_reference_frame(
+                            untested_cells, filepath, test_height=test_height, add_frame=True
+                        )
 
                     if success:
                         dialog.destroy()
                         self.update_status(f"Test print saved: {os.path.basename(filepath)}",
                                          self.colors['accent_green'])
-                        messagebox.showinfo("Success",
-                                          f"Test print generated successfully!\n\n"
-                                          f"File: {os.path.basename(filepath)}\n"
-                                          f"Cells: {len(untested_cells)}\n"
-                                          f"Height: {test_height:.2f}mm ({test_layers} layers)")
+
+                        success_msg = (
+                            f"Test print generated successfully!\n\n"
+                            f"File: {os.path.basename(filepath)}\n"
+                            f"Cells: {len(untested_cells)}\n"
+                            f"Height: {test_height:.2f}mm ({test_layers} layers)"
+                        )
+
+                        if guide_path:
+                            success_msg += f"\n\nPosition guide: {os.path.basename(guide_path)}"
+                            success_msg += "\n\nIMPORTANT for Elegoo Slicer:"
+                            success_msg += "\n• Use File → Open Project (not Add Model)"
+                            success_msg += "\n• Uncheck 'Center Object' for each part"
+                            success_msg += "\n• Lock placement before slicing"
+
+                        messagebox.showinfo("Success", success_msg)
                     else:
                         messagebox.showerror("Error", "Failed to export test print")
 
