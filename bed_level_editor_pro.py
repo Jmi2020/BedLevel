@@ -404,6 +404,34 @@ class BedMeshTestGenerator:
 
         return scene
 
+    def calculate_object_center(self, cells):
+        """
+        Calculate the center point of the combined test square object.
+        This is where Elegoo Slicer's move tool anchors.
+
+        Args:
+            cells: List of (y, x) tuples
+
+        Returns:
+            Tuple (center_x, center_y) in mm
+        """
+        if not cells:
+            return (0, 0)
+
+        x_coords = []
+        y_coords = []
+
+        for (y_idx, x_idx) in cells:
+            center_x, center_y = self.get_cell_center(x_idx, y_idx)
+            x_coords.append(center_x)
+            y_coords.append(center_y)
+
+        # Average of all cell centers = center of combined object
+        avg_x = sum(x_coords) / len(x_coords)
+        avg_y = sum(y_coords) / len(y_coords)
+
+        return (round(avg_x, 2), round(avg_y, 2))
+
     def export_scene_3mf(self, cells, filepath, test_height=0.4, padding=2.0):
         """
         Export 3MF scene optimized for Elegoo Slicer with preserved positions.
@@ -415,7 +443,7 @@ class BedMeshTestGenerator:
             padding: Padding around each square in mm
 
         Returns:
-            Tuple (success: bool, position_guide_path: str or None)
+            Tuple (success: bool, position_guide_path: str or None, center_coord: tuple or None)
         """
         try:
             # Generate scene with positioned objects
@@ -428,17 +456,20 @@ class BedMeshTestGenerator:
             # Export scene (trimesh will write individual objects with transform matrices)
             scene.export(filepath, file_type='3mf')
 
+            # Calculate center coordinate for move tool
+            center_coord = self.calculate_object_center(cells)
+
             # Export position guide JSON
             guide_path = filepath.replace('.3mf', '_positions.json')
-            self.export_position_guide(cells, guide_path, test_height)
+            self.export_position_guide(cells, guide_path, test_height, center_coord)
 
-            return True, guide_path
+            return True, guide_path, center_coord
 
         except Exception as e:
             print(f"Scene 3MF export error: {e}")
-            return False, None
+            return False, None, None
 
-    def export_position_guide(self, cells, filepath, test_height=0.4):
+    def export_position_guide(self, cells, filepath, test_height=0.4, center_coord=None):
         """
         Export JSON file with position information for verification.
 
@@ -446,6 +477,7 @@ class BedMeshTestGenerator:
             cells: List of (y, x) tuples
             filepath: Output JSON file path
             test_height: Height of test squares in mm
+            center_coord: Tuple (x, y) center coordinate for move tool
         """
         import json
 
@@ -460,6 +492,12 @@ class BedMeshTestGenerator:
             })
 
         guide_data = {
+            'move_tool_coordinate': {
+                'x': center_coord[0] if center_coord else 0,
+                'y': center_coord[1] if center_coord else 0,
+                'z': 0,
+                'instruction': 'Enter these coordinates in Elegoo Slicer Move tool to position the test squares correctly'
+            },
             'mesh_config': {
                 'mesh_min': list(self.mesh_min),
                 'mesh_max': list(self.mesh_max),
@@ -477,21 +515,24 @@ class BedMeshTestGenerator:
             'instructions': {
                 'elegoo_slicer': [
                     '1. Open Elegoo Slicer',
-                    '2. File → Open Project (NOT Add Model)',
-                    '3. Select the .3mf file',
-                    '4. For EACH imported object:',
-                    '   - Right-click on object',
-                    '   - UNCHECK "Center Object" if checked',
-                    '   - Verify position matches this JSON file',
-                    '   - Right-click → Lock Placement',
-                    '5. Slice and generate G-code',
-                    '6. Print and verify first layer adhesion'
+                    '2. File → Open Project',
+                    '3. Select the .3mf file (object will be centered)',
+                    '4. Click on the imported object to select it',
+                    '5. Click the Move tool in the left toolbar',
+                    '6. In the position dialog, enter these coordinates:',
+                    f'   X: {center_coord[0] if center_coord else 0}',
+                    f'   Y: {center_coord[1] if center_coord else 0}',
+                    '   Z: 0',
+                    '7. Press Enter to apply the position',
+                    '8. Verify test squares are now at mesh grid locations',
+                    '9. Slice and generate G-code',
+                    '10. Print and verify first layer adhesion'
                 ],
                 'troubleshooting': {
-                    'objects_centered': 'Uncheck "Center Object" in Move tool',
+                    'object_centered': 'Use Move tool and enter the coordinates above',
                     'objects_off_bed': 'Verify Klipper mesh_min/mesh_max match printer bed size',
-                    'cant_move_objects': 'Must uncheck "Center Object" first',
-                    'positions_reset': 'Lock placement (right-click → Lock) before slicing'
+                    'wrong_position': 'Double-check you entered X and Y values correctly',
+                    'z_not_zero': 'Z should be 0 so squares sit on the bed'
                 }
             }
         }
@@ -2047,7 +2088,7 @@ class BedLevelEditorPro:
                         # Generate and export using scene-based methods
                         if file_format == "3mf":
                             # Use scene export for positioned objects
-                            success, guide_path = self.test_generator.export_scene_3mf(
+                            success, guide_path, center_coord = self.test_generator.export_scene_3mf(
                                 batch, filepath, test_height=test_height
                             )
                             if success and guide_path:
@@ -2086,9 +2127,10 @@ class BedLevelEditorPro:
 
                     # Generate and export using scene-based methods
                     guide_path = None
+                    center_coord = None
                     if file_format == "3mf":
                         # Use scene export for positioned objects
-                        success, guide_path = self.test_generator.export_scene_3mf(
+                        success, guide_path, center_coord = self.test_generator.export_scene_3mf(
                             untested_cells, filepath, test_height=test_height
                         )
                     else:
@@ -2096,6 +2138,8 @@ class BedLevelEditorPro:
                         success = self.test_generator.export_with_reference_frame(
                             untested_cells, filepath, test_height=test_height, add_frame=True
                         )
+                        # Calculate center for STL too
+                        center_coord = self.test_generator.calculate_object_center(untested_cells)
 
                     if success:
                         dialog.destroy()
@@ -2103,18 +2147,29 @@ class BedLevelEditorPro:
                                          self.colors['accent_green'])
 
                         success_msg = (
-                            f"Test print generated successfully!\n\n"
+                            f"✓ Test print generated successfully!\n\n"
                             f"File: {os.path.basename(filepath)}\n"
                             f"Cells: {len(untested_cells)}\n"
                             f"Height: {test_height:.2f}mm ({test_layers} layers)"
                         )
 
+                        if center_coord:
+                            success_msg += f"\n\n{'='*50}"
+                            success_msg += f"\n📍 POSITION IN ELEGOO SLICER:"
+                            success_msg += f"\n{'='*50}"
+                            success_msg += f"\n\n1. Open Elegoo Slicer"
+                            success_msg += f"\n2. File → Open Project"
+                            success_msg += f"\n3. Select the .3mf file"
+                            success_msg += f"\n4. Click the object, then click Move tool"
+                            success_msg += f"\n5. Enter these coordinates:\n"
+                            success_msg += f"\n   X: {center_coord[0]}"
+                            success_msg += f"\n   Y: {center_coord[1]}"
+                            success_msg += f"\n   Z: 0\n"
+                            success_msg += f"\n6. Press Enter to apply"
+                            success_msg += f"\n7. Slice and print!"
+
                         if guide_path:
-                            success_msg += f"\n\nPosition guide: {os.path.basename(guide_path)}"
-                            success_msg += "\n\nIMPORTANT for Elegoo Slicer:"
-                            success_msg += "\n• Use File → Open Project (not Add Model)"
-                            success_msg += "\n• Uncheck 'Center Object' for each part"
-                            success_msg += "\n• Lock placement before slicing"
+                            success_msg += f"\n\n📄 Position guide: {os.path.basename(guide_path)}"
 
                         messagebox.showinfo("Success", success_msg)
                     else:
