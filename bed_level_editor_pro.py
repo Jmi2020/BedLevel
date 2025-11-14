@@ -20,8 +20,15 @@ import os
 class ModernButton(tk.Button):
     """Styled button with hover effects"""
     def __init__(self, parent, **kwargs):
+        # Ensure white text by default
+        if 'fg' not in kwargs:
+            kwargs['fg'] = 'white'
+        if 'activeforeground' not in kwargs:
+            kwargs['activeforeground'] = 'white'
+
         super().__init__(parent, **kwargs)
         self.default_bg = kwargs.get('bg', '#4a90e2')
+        self.default_fg = kwargs.get('fg', 'white')
         self.hover_bg = self.lighten_color(self.default_bg)
 
         self.bind('<Enter>', self.on_enter)
@@ -37,10 +44,10 @@ class ModernButton(tk.Button):
         return f'#{r:02x}{g:02x}{b:02x}'
 
     def on_enter(self, e):
-        self.config(bg=self.hover_bg)
+        self.config(bg=self.hover_bg, fg=self.default_fg)
 
     def on_leave(self, e):
-        self.config(bg=self.default_bg)
+        self.config(bg=self.default_bg, fg=self.default_fg)
 
 class BedLevelEditorPro:
     def __init__(self, root):
@@ -196,7 +203,7 @@ class BedLevelEditorPro:
         self.mode_indicator.pack(side=tk.RIGHT)
 
         # Matplotlib figure with fixed layout
-        self.fig = Figure(figsize=(11, 9), facecolor=self.colors['bg_medium'], layout='constrained')
+        self.fig = Figure(figsize=(11, 9), facecolor=self.colors['bg_medium'])
         self.ax = self.fig.add_subplot(111)
 
         self.canvas = FigureCanvasTkAgg(self.fig, master=viz_container)
@@ -702,7 +709,7 @@ class BedLevelEditorPro:
             ax.set_facecolor(self.colors['bg_dark'])
 
         fig_interp.patch.set_facecolor(self.colors['bg_dark'])
-        fig_interp.tight_layout()
+        fig_interp.subplots_adjust(left=0.05, right=0.95, top=0.93, bottom=0.07)
 
         canvas_interp = FigureCanvasTkAgg(fig_interp, master=window)
         canvas_interp.draw()
@@ -820,8 +827,8 @@ class BedLevelEditorPro:
         self.ax.tick_params(colors=self.colors['fg_primary'], labelsize=9)
         self.ax.set_facecolor(self.colors['bg_dark'])
 
-        # Use tight_layout to prevent resizing
-        self.fig.tight_layout()
+        # Adjust layout with proper spacing
+        self.fig.subplots_adjust(left=0.08, right=0.92, top=0.95, bottom=0.08)
         self.canvas.draw_idle()  # Use draw_idle instead of draw for better performance
 
     def on_mouse_press(self, event):
