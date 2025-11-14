@@ -448,7 +448,6 @@ class BedMeshTestGenerator:
         try:
             import trimesh
             import zipfile
-            import uuid
             from datetime import datetime
             import xml.etree.ElementTree as ET
 
@@ -474,13 +473,11 @@ class BedMeshTestGenerator:
                 # XML namespace
                 ns = 'http://schemas.microsoft.com/3dmanufacturing/core/2015/02'
                 ET.register_namespace('', ns)
-                ET.register_namespace('p', 'http://schemas.microsoft.com/3dmanufacturing/production/2015/06')
 
-                # Create root model element
+                # Create root model element for main file
                 root = ET.Element('{%s}model' % ns)
                 root.set('unit', 'millimeter')
                 root.set('xml:lang', 'en-US')
-                root.set('{http://www.w3.org/XML/1998/namespace}lang', 'en-US')
 
                 # Add metadata
                 metadata_items = [
@@ -500,7 +497,9 @@ class BedMeshTestGenerator:
                 build = ET.SubElement(root, '{%s}build' % ns)
 
                 # Generate each test square
-                object_id = 1
+                mesh_object_id = 1  # ID for mesh objects in separate files
+                wrapper_object_id = 2  # ID for wrapper objects in main file (even numbers)
+
                 for idx, (y_idx, x_idx) in enumerate(sorted(cells), 1):
                     # Get position for this cell
                     center_x, center_y = self.get_cell_center(x_idx, y_idx)
@@ -508,18 +507,22 @@ class BedMeshTestGenerator:
                     # Create test square mesh at origin
                     box = trimesh.creation.box(extents=[cell_size, cell_size, test_height])
 
-                    # Save mesh to Objects directory
+                    # Create individual object file
                     mesh_filename = f'mesh_test_r{y_idx:02d}_c{x_idx:02d}_{idx}.model'
                     mesh_path = os.path.join(objects_dir, mesh_filename)
-                    box.export(mesh_path, file_type='3mf')
 
-                    # Add object to resources
-                    obj = ET.SubElement(resources, '{%s}object' % ns)
-                    obj.set('id', str(object_id))
-                    obj.set('type', 'model')
+                    # Build object file XML
+                    obj_root = ET.Element('{%s}model' % ns)
+                    obj_root.set('unit', 'millimeter')
+                    obj_root.set('xml:lang', 'en-US')
 
-                    # Create mesh element (simple triangle mesh)
-                    mesh = ET.SubElement(obj, '{%s}mesh' % ns)
+                    obj_resources = ET.SubElement(obj_root, '{%s}resources' % ns)
+                    obj_object = ET.SubElement(obj_resources, '{%s}object' % ns)
+                    obj_object.set('id', str(mesh_object_id))
+                    obj_object.set('type', 'model')
+
+                    # Add mesh geometry
+                    mesh = ET.SubElement(obj_object, '{%s}mesh' % ns)
                     vertices = ET.SubElement(mesh, '{%s}vertices' % ns)
                     triangles = ET.SubElement(mesh, '{%s}triangles' % ns)
 
@@ -537,18 +540,35 @@ class BedMeshTestGenerator:
                         triangle.set('v2', str(face[1]))
                         triangle.set('v3', str(face[2]))
 
-                    # Add build item with transform
-                    # Transform format: m00 m01 m02 m10 m11 m12 m20 m21 m22 tx ty tz
-                    # Identity rotation + translation to position
-                    transform = f'1 0 0 0 1 0 0 0 1 {center_x:.6f} {center_y:.6f} {test_height/2:.6f}'
+                    # Add empty build section to object file
+                    ET.SubElement(obj_root, '{%s}build' % ns)
 
+                    # Write object file
+                    obj_tree = ET.ElementTree(obj_root)
+                    obj_tree.write(mesh_path, encoding='UTF-8', xml_declaration=True)
+
+                    # Create wrapper object in main file that references the external mesh
+                    wrapper_obj = ET.SubElement(resources, '{%s}object' % ns)
+                    wrapper_obj.set('id', str(wrapper_object_id))
+                    wrapper_obj.set('type', 'model')
+
+                    # Add component that references the external file
+                    components = ET.SubElement(wrapper_obj, '{%s}components' % ns)
+                    component = ET.SubElement(components, '{%s}component' % ns)
+                    component.set('objectid', str(mesh_object_id))
+                    component.set('{http://schemas.microsoft.com/3dmanufacturing/production/2015/06}path',
+                                f'/3D/Objects/{mesh_filename}')
+                    component.set('transform', '1 0 0 0 1 0 0 0 1 0 0 0')  # Identity transform
+
+                    # Add build item with position transform
+                    transform = f'1 0 0 0 1 0 0 0 1 {center_x:.6f} {center_y:.6f} {test_height/2:.6f}'
                     item = ET.SubElement(build, '{%s}item' % ns)
-                    item.set('objectid', str(object_id))
+                    item.set('objectid', str(wrapper_object_id))
                     item.set('transform', transform)
 
-                    object_id += 1
+                    wrapper_object_id += 2  # Increment by 2 to keep even numbers
 
-                # Write 3dmodel.model file
+                # Write main 3dmodel.model file
                 tree = ET.ElementTree(root)
                 model_path = os.path.join(temp_dir, '3D', '3dmodel.model')
                 tree.write(model_path, encoding='UTF-8', xml_declaration=True)
