@@ -1028,6 +1028,7 @@ class BedLevelEditorPro:
         action_buttons = [
             ("📂 Open", self.browse_file, self.colors['accent_blue']),
             ("💾 Save", self.save_mesh_data, self.colors['accent_green']),
+            ("💾 Save As", self.save_mesh_data_as, self.colors['accent_green']),
             ("↩️ Reset", self.reset_mesh_data, self.colors['accent_orange']),
         ]
 
@@ -1346,7 +1347,7 @@ class BedLevelEditorPro:
 
         # Shortcuts hint
         shortcuts = tk.Label(self.status_bar,
-                            text="Shortcuts: Ctrl+S=Save | Ctrl+Z=Reset | Ctrl+O=Open | Esc=Clear",
+                            text="Shortcuts: Ctrl+S=Save | Ctrl+Z=Undo | Ctrl+Shift+Z=Reset | Ctrl+O=Open | Esc=Clear",
                             font=self.fonts['small'], bg=self.colors['bg_medium'],
                             fg=self.colors['fg_secondary'])
         shortcuts.pack(side=tk.RIGHT, padx=15, pady=6)
@@ -1501,6 +1502,67 @@ class BedLevelEditorPro:
                              self.colors['accent_green'])
 
             messagebox.showinfo("Success", f"Mesh data saved!\nBackup created: {backup_file}")
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to save mesh data: {str(e)}")
+            self.update_status(f"Error saving: {str(e)}", self.colors['accent_red'])
+
+    def save_mesh_data_as(self):
+        """Save mesh data to a different printer.cfg file"""
+        if self.mesh_data is None:
+            messagebox.showerror("Error", "No mesh data to save")
+            return
+
+        # Prompt for save location
+        filename = filedialog.asksaveasfilename(
+            title="Save printer.cfg as...",
+            initialdir=os.path.dirname(self.config_file),
+            initialfile=os.path.basename(self.config_file),
+            defaultextension=".cfg",
+            filetypes=[("Config files", "*.cfg"), ("All files", "*.*")]
+        )
+
+        if not filename:
+            return
+
+        try:
+            self.update_status("Saving mesh data...", self.colors['accent_blue'])
+
+            # Read current config file content
+            with open(self.config_file, 'r') as f:
+                content = f.read()
+
+            mesh_pattern = r'(\[bed_mesh default\].*?points =\s*).*?(?=#\*#\s*x_count)'
+
+            points_str = ""
+            for row in self.mesh_data:
+                points_str += "#*# \t  "
+                points_str += ", ".join([f"{val:.6f}" for val in row])
+                points_str += "\n"
+
+            new_content = re.sub(mesh_pattern, r'\1\n' + points_str, content, flags=re.DOTALL)
+
+            # Create backup of destination file if it exists
+            if os.path.exists(filename):
+                backup_file = filename + ".backup"
+                with open(backup_file, 'w') as f:
+                    with open(filename, 'r') as orig:
+                        f.write(orig.read())
+
+            # Write to new location
+            with open(filename, 'w') as f:
+                f.write(new_content)
+
+            # Update current config file reference
+            self.config_file = filename
+            self.file_label.config(text=os.path.basename(self.config_file))
+            self.original_mesh_data = self.mesh_data.copy()
+            self.is_modified = False
+
+            self.update_status(f"✓ Saved to: {os.path.basename(filename)}",
+                             self.colors['accent_green'])
+
+            messagebox.showinfo("Success", f"Mesh data saved to:\n{filename}")
 
         except Exception as e:
             messagebox.showerror("Error", f"Failed to save mesh data: {str(e)}")
@@ -1904,8 +1966,8 @@ class BedLevelEditorPro:
         if self.mesh_data is None:
             return
 
-        # Create snapshot of current state
-        snapshot = self.mesh_data.copy()
+        # Create deep copy of current state using numpy
+        snapshot = np.copy(self.mesh_data)
 
         # Add to undo stack
         self.undo_stack.append((snapshot, description))
@@ -1927,8 +1989,8 @@ class BedLevelEditorPro:
         # Pop the last state
         previous_state, description = self.undo_stack.pop()
 
-        # Restore the mesh data
-        self.mesh_data = previous_state.copy()
+        # Restore the mesh data using deep copy
+        self.mesh_data = np.copy(previous_state)
 
         # Update displays
         self.is_modified = True
@@ -2452,23 +2514,11 @@ class BedLevelEditorPro:
                             f"✓ Test print generated successfully!\n\n"
                             f"File: {os.path.basename(filepath)}\n"
                             f"Cells: {len(untested_cells)}\n"
-                            f"Height: {test_height:.2f}mm ({test_layers} layers)"
+                            f"Height: {test_height:.2f}mm ({test_layers} layers)\n\n"
+                            f"The 3MF file contains positioning data.\n"
+                            f"Objects will be automatically placed at the correct bed positions\n"
+                            f"when opened in Elegoo Slicer."
                         )
-
-                        if center_coord:
-                            success_msg += f"\n\n{'='*50}"
-                            success_msg += f"\n📍 POSITION IN ELEGOO SLICER:"
-                            success_msg += f"\n{'='*50}"
-                            success_msg += f"\n\n1. Open Elegoo Slicer"
-                            success_msg += f"\n2. File → Open Project"
-                            success_msg += f"\n3. Select the .3mf file"
-                            success_msg += f"\n4. Click the object, then click Move tool"
-                            success_msg += f"\n5. Enter these coordinates:\n"
-                            success_msg += f"\n   X: {center_coord[0]}"
-                            success_msg += f"\n   Y: {center_coord[1]}"
-                            success_msg += f"\n   Z: 0\n"
-                            success_msg += f"\n6. Press Enter to apply"
-                            success_msg += f"\n7. Slice and print!"
 
                         if guide_path:
                             success_msg += f"\n\n📄 Position guide: {os.path.basename(guide_path)}"
