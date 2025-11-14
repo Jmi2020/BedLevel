@@ -494,20 +494,20 @@ class BedLevelEditorPro:
         # ========== TOP TOOLBAR ==========
         self.create_top_toolbar(main_container)
 
-        # ========== CONTENT AREA ==========
-        content_frame = tk.Frame(main_container, bg=self.colors['bg_dark'])
-        content_frame.pack(fill=tk.BOTH, expand=True, pady=(10, 0))
+        # ========== CONTENT AREA WITH RESIZABLE PANES ==========
+        # Create a PanedWindow for resizable divider
+        paned_window = ttk.PanedWindow(main_container, orient=tk.HORIZONTAL)
+        paned_window.pack(fill=tk.BOTH, expand=True, pady=(10, 0))
 
-        # Left: Visualization
-        left_frame = tk.Frame(content_frame, bg=self.colors['bg_dark'])
-        left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        # Left pane: Visualization
+        left_frame = tk.Frame(paned_window, bg=self.colors['bg_dark'])
+        paned_window.add(left_frame, weight=3)  # Takes 75% by default
 
         self.create_visualization_panel(left_frame)
 
-        # Right: Control Panel
-        right_frame = tk.Frame(content_frame, bg=self.colors['bg_dark'], width=380)
-        right_frame.pack(side=tk.RIGHT, fill=tk.Y, padx=(15, 0))
-        right_frame.pack_propagate(False)
+        # Right pane: Control Panel
+        right_frame = tk.Frame(paned_window, bg=self.colors['bg_dark'])
+        paned_window.add(right_frame, weight=1)  # Takes 25% by default
 
         self.create_control_panel(right_frame)
 
@@ -609,6 +609,21 @@ class BedLevelEditorPro:
 
         canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
+
+        # Enable mouse wheel scrolling
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+
+        def _on_mousewheel_linux(event):
+            if event.num == 4:
+                canvas.yview_scroll(-1, "units")
+            elif event.num == 5:
+                canvas.yview_scroll(1, "units")
+
+        # Bind mouse wheel to canvas and all child widgets
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)  # Windows/Mac
+        canvas.bind_all("<Button-4>", _on_mousewheel_linux)  # Linux scroll up
+        canvas.bind_all("<Button-5>", _on_mousewheel_linux)  # Linux scroll down
 
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
