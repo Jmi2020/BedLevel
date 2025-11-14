@@ -2463,13 +2463,13 @@ class BedLevelEditorPro:
                         batch_name = f"{print_name}_batch{idx}"
                         filepath = os.path.join(save_dir, f"{batch_name}.{extension}")
 
-                        # Generate and export using scene-based methods
+                        # Generate and export
                         if file_format == "3mf":
-                            # Use scene export for positioned objects
-                            success, guide_path, center_coord = self.test_generator.export_scene_3mf(
-                                batch, filepath, test_height=test_height
+                            # Generate combined mesh with positioned objects
+                            mesh = self.test_generator.generate_test_print(
+                                batch, test_height=test_height
                             )
-                            # guide_path is now None since positions are embedded in 3MF
+                            success = self.test_generator.export_3mf(mesh, filepath)
                         else:
                             # Use STL with reference frame
                             success = self.test_generator.export_with_reference_frame(
@@ -2498,21 +2498,18 @@ class BedLevelEditorPro:
                     if not filepath:
                         return
 
-                    # Generate and export using scene-based methods
-                    guide_path = None
-                    center_coord = None
+                    # Generate and export
                     if file_format == "3mf":
-                        # Use scene export for positioned objects
-                        success, guide_path, center_coord = self.test_generator.export_scene_3mf(
-                            untested_cells, filepath, test_height=test_height
+                        # Generate combined mesh with positioned objects
+                        mesh = self.test_generator.generate_test_print(
+                            untested_cells, test_height=test_height
                         )
+                        success = self.test_generator.export_3mf(mesh, filepath)
                     else:
                         # Use STL with reference frame
                         success = self.test_generator.export_with_reference_frame(
                             untested_cells, filepath, test_height=test_height, add_frame=True
                         )
-                        # Calculate center for STL too
-                        center_coord = self.test_generator.calculate_object_center(untested_cells)
 
                     if success:
                         dialog.destroy()
@@ -2524,9 +2521,8 @@ class BedLevelEditorPro:
                             f"File: {os.path.basename(filepath)}\n"
                             f"Cells: {len(untested_cells)}\n"
                             f"Height: {test_height:.2f}mm ({test_layers} layers)\n\n"
-                            f"The 3MF file contains positioning data.\n"
-                            f"Objects will be automatically placed at the correct bed positions\n"
-                            f"when opened in Elegoo Slicer."
+                            f"Test squares are already positioned at the correct bed locations.\n"
+                            f"Load the file in Elegoo Slicer and slice directly."
                         )
 
                         messagebox.showinfo("Success", success_msg)
