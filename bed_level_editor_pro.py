@@ -434,7 +434,7 @@ class BedMeshTestGenerator:
 
     def export_scene_3mf(self, cells, filepath, test_height=0.4, padding=2.0):
         """
-        Export 3MF scene optimized for Elegoo Slicer with preserved positions.
+        Export 3MF with correct build transforms for Elegoo Slicer position preservation.
 
         Args:
             cells: List of (y, x) tuples
@@ -446,15 +446,143 @@ class BedMeshTestGenerator:
             Tuple (success: bool, position_guide_path: str or None, center_coord: tuple or None)
         """
         try:
-            # Generate scene with positioned objects
-            scene = self.generate_test_squares_scene(cells, test_height, padding)
+            import trimesh
+            import zipfile
+            import uuid
+            from datetime import datetime
+            import xml.etree.ElementTree as ET
 
             # Ensure .3mf extension
             if not filepath.endswith('.3mf'):
                 filepath = f'{filepath}.3mf'
 
-            # Export scene (trimesh will write individual objects with transform matrices)
-            scene.export(filepath, file_type='3mf')
+            # Calculate square size
+            cell_size = min(self.x_spacing, self.y_spacing) - padding
+            if cell_size < 5.0:
+                cell_size = max(cell_size, 5.0)
+
+            # Create temporary directory for 3MF contents
+            import tempfile
+            import shutil
+            temp_dir = tempfile.mkdtemp()
+
+            try:
+                # Create directory structure
+                objects_dir = os.path.join(temp_dir, '3D', 'Objects')
+                os.makedirs(objects_dir, exist_ok=True)
+
+                # XML namespace
+                ns = 'http://schemas.microsoft.com/3dmanufacturing/core/2015/02'
+                ET.register_namespace('', ns)
+                ET.register_namespace('p', 'http://schemas.microsoft.com/3dmanufacturing/production/2015/06')
+
+                # Create root model element
+                root = ET.Element('{%s}model' % ns)
+                root.set('unit', 'millimeter')
+                root.set('xml:lang', 'en-US')
+                root.set('{http://www.w3.org/XML/1998/namespace}lang', 'en-US')
+
+                # Add metadata
+                metadata_items = [
+                    ('Application', 'BedLevelEditorPro'),
+                    ('CreationDate', datetime.now().strftime('%Y-%m-%d')),
+                    ('Title', 'Bed Mesh Test Print')
+                ]
+                for name, value in metadata_items:
+                    meta = ET.SubElement(root, '{%s}metadata' % ns)
+                    meta.set('name', name)
+                    meta.text = value
+
+                # Create resources section
+                resources = ET.SubElement(root, '{%s}resources' % ns)
+
+                # Create build section
+                build = ET.SubElement(root, '{%s}build' % ns)
+
+                # Generate each test square
+                object_id = 1
+                for idx, (y_idx, x_idx) in enumerate(sorted(cells), 1):
+                    # Get position for this cell
+                    center_x, center_y = self.get_cell_center(x_idx, y_idx)
+
+                    # Create test square mesh at origin
+                    box = trimesh.creation.box(extents=[cell_size, cell_size, test_height])
+
+                    # Save mesh to Objects directory
+                    mesh_filename = f'mesh_test_r{y_idx:02d}_c{x_idx:02d}_{idx}.model'
+                    mesh_path = os.path.join(objects_dir, mesh_filename)
+                    box.export(mesh_path, file_type='3mf')
+
+                    # Add object to resources
+                    obj = ET.SubElement(resources, '{%s}object' % ns)
+                    obj.set('id', str(object_id))
+                    obj.set('type', 'model')
+
+                    # Create mesh element (simple triangle mesh)
+                    mesh = ET.SubElement(obj, '{%s}mesh' % ns)
+                    vertices = ET.SubElement(mesh, '{%s}vertices' % ns)
+                    triangles = ET.SubElement(mesh, '{%s}triangles' % ns)
+
+                    # Add vertices
+                    for v in box.vertices:
+                        vertex = ET.SubElement(vertices, '{%s}vertex' % ns)
+                        vertex.set('x', f'{v[0]:.6f}')
+                        vertex.set('y', f'{v[1]:.6f}')
+                        vertex.set('z', f'{v[2]:.6f}')
+
+                    # Add triangles
+                    for face in box.faces:
+                        triangle = ET.SubElement(triangles, '{%s}triangle' % ns)
+                        triangle.set('v1', str(face[0]))
+                        triangle.set('v2', str(face[1]))
+                        triangle.set('v3', str(face[2]))
+
+                    # Add build item with transform
+                    # Transform format: m00 m01 m02 m10 m11 m12 m20 m21 m22 tx ty tz
+                    # Identity rotation + translation to position
+                    transform = f'1 0 0 0 1 0 0 0 1 {center_x:.6f} {center_y:.6f} {test_height/2:.6f}'
+
+                    item = ET.SubElement(build, '{%s}item' % ns)
+                    item.set('objectid', str(object_id))
+                    item.set('transform', transform)
+
+                    object_id += 1
+
+                # Write 3dmodel.model file
+                tree = ET.ElementTree(root)
+                model_path = os.path.join(temp_dir, '3D', '3dmodel.model')
+                tree.write(model_path, encoding='UTF-8', xml_declaration=True)
+
+                # Create [Content_Types].xml
+                content_types_path = os.path.join(temp_dir, '[Content_Types].xml')
+                with open(content_types_path, 'w') as f:
+                    f.write('<?xml version="1.0" encoding="UTF-8"?>\n')
+                    f.write('<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">\n')
+                    f.write('  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>\n')
+                    f.write('  <Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/>\n')
+                    f.write('</Types>\n')
+
+                # Create _rels/.rels
+                rels_dir = os.path.join(temp_dir, '_rels')
+                os.makedirs(rels_dir, exist_ok=True)
+                rels_path = os.path.join(rels_dir, '.rels')
+                with open(rels_path, 'w') as f:
+                    f.write('<?xml version="1.0" encoding="UTF-8"?>\n')
+                    f.write('<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">\n')
+                    f.write('  <Relationship Target="/3D/3dmodel.model" Id="rel0" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/>\n')
+                    f.write('</Relationships>\n')
+
+                # Create ZIP archive (3MF is a ZIP file)
+                with zipfile.ZipFile(filepath, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                    for root_dir, dirs, files in os.walk(temp_dir):
+                        for file in files:
+                            file_path = os.path.join(root_dir, file)
+                            arc_name = os.path.relpath(file_path, temp_dir)
+                            zipf.write(file_path, arc_name)
+
+            finally:
+                # Clean up temp directory
+                shutil.rmtree(temp_dir, ignore_errors=True)
 
             # Calculate center coordinate for move tool
             center_coord = self.calculate_object_center(cells)
@@ -466,7 +594,9 @@ class BedMeshTestGenerator:
             return True, guide_path, center_coord
 
         except Exception as e:
-            print(f"Scene 3MF export error: {e}")
+            print(f"3MF export error: {e}")
+            import traceback
+            traceback.print_exc()
             return False, None, None
 
     def export_position_guide(self, cells, filepath, test_height=0.4, center_coord=None):
