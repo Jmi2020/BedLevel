@@ -894,6 +894,10 @@ class BedLevelEditorPro:
         self.modification_tracker = None
         self.show_modifications = True  # Show/hide modification indicators
 
+        # Undo stack
+        self.undo_stack = []  # List of (mesh_snapshot, description) tuples
+        self.max_undo_steps = 50  # Maximum undo history
+
         # Test print generation
         self.test_generator = BedMeshTestGenerator(self.mesh_min, self.mesh_max, self.x_count, self.y_count)
 
@@ -928,7 +932,8 @@ class BedLevelEditorPro:
 
         # Keyboard shortcuts
         self.root.bind('<Control-s>', lambda e: self.save_mesh_data())
-        self.root.bind('<Control-z>', lambda e: self.reset_mesh_data())
+        self.root.bind('<Control-z>', lambda e: self.undo_last_change())
+        self.root.bind('<Control-Shift-Z>', lambda e: self.reset_mesh_data())  # Changed to Ctrl+Shift+Z for full reset
         self.root.bind('<Control-o>', lambda e: self.browse_file())
         self.root.bind('<Escape>', lambda e: self.clear_region())
 
@@ -1283,6 +1288,12 @@ class BedLevelEditorPro:
                              bg=color, fg='white', font=self.fonts['normal'],
                              relief=tk.FLAT, cursor='hand2')
             btn.pack(fill=tk.X, padx=10, pady=4, ipady=6)
+
+        # Undo button (starts disabled/grayed)
+        self.undo_btn = ModernButton(batch_section, text="↶ UNDO (Ctrl+Z)", command=self.undo_last_change,
+                                     bg=self.colors['bg_light'], fg='white', font=self.fonts['heading'],
+                                     relief=tk.FLAT, cursor='hand2')
+        self.undo_btn.pack(fill=tk.X, padx=10, pady=(10, 4), ipady=8)
 
     def create_section(self, parent, title):
         """Create a styled section container"""
@@ -1868,6 +1879,51 @@ class BedLevelEditorPro:
         except ValueError:
             pass
 
+    def save_undo_state(self, description="Change"):
+        """Save current mesh state to undo stack"""
+        if self.mesh_data is None:
+            return
+
+        # Create snapshot of current state
+        snapshot = self.mesh_data.copy()
+
+        # Add to undo stack
+        self.undo_stack.append((snapshot, description))
+
+        # Limit stack size
+        if len(self.undo_stack) > self.max_undo_steps:
+            self.undo_stack.pop(0)
+
+        # Update undo button state if it exists
+        if hasattr(self, 'undo_btn'):
+            self.undo_btn.config(bg=self.colors['accent_blue'])
+
+    def undo_last_change(self):
+        """Undo the last modification"""
+        if not self.undo_stack:
+            messagebox.showinfo("Undo", "No changes to undo")
+            return
+
+        # Pop the last state
+        previous_state, description = self.undo_stack.pop()
+
+        # Restore the mesh data
+        self.mesh_data = previous_state.copy()
+
+        # Update displays
+        self.is_modified = True
+        self.update_plot()
+        self.update_statistics()
+        self.update_status(f"Undone: {description}", self.colors['accent_orange'])
+
+        # Update undo button appearance
+        if hasattr(self, 'undo_btn'):
+            if not self.undo_stack:
+                self.undo_btn.config(bg=self.colors['bg_light'])
+
+        # Clear selection after undo to avoid confusion
+        self.clear_region()
+
     def update_selection_value(self):
         """Update the selected point or region value (supports absolute and relative adjustments)"""
         try:
@@ -1875,6 +1931,14 @@ class BedLevelEditorPro:
 
             # Check if it's a relative adjustment (starts with + or -)
             is_relative = value_str.startswith('+') or value_str.startswith('-')
+
+            # Save state before making changes
+            if is_relative:
+                offset = float(value_str)
+                self.save_undo_state(f"Apply {offset:+.4f}mm offset")
+            else:
+                new_value = float(value_str)
+                self.save_undo_state(f"Set to {new_value:.4f}mm")
 
             if is_relative:
                 # Parse relative adjustment
@@ -1957,6 +2021,7 @@ class BedLevelEditorPro:
             messagebox.showwarning("Warning", "Please select a region first")
             return
 
+        self.save_undo_state("Average region")
         avg = np.mean([self.mesh_data[y, x] for y, x in self.selected_region])
         for (y, x) in self.selected_region:
             old_value = self.mesh_data[y, x]
@@ -1979,6 +2044,7 @@ class BedLevelEditorPro:
             messagebox.showwarning("Warning", "Please select a region first")
             return
 
+        self.save_undo_state("Smooth region")
         smoothed = self.mesh_data.copy()
 
         for (y, x) in self.selected_region:
@@ -2009,6 +2075,7 @@ class BedLevelEditorPro:
             messagebox.showwarning("Warning", "Please select a region first")
             return
 
+        self.save_undo_state(f"Region offset {offset:+.4f}mm")
         # Apply offset to each cell in region
         for (y, x) in self.selected_region:
             old_value = self.mesh_data[y, x]
@@ -2447,6 +2514,7 @@ class BedLevelEditorPro:
             return
 
         if messagebox.askyesno("Confirm", "Set all points to average value?"):
+            self.save_undo_state("Flatten mesh")
             avg = np.mean(self.mesh_data)
             # Track modifications for all cells
             if self.modification_tracker:
@@ -2487,6 +2555,7 @@ class BedLevelEditorPro:
         def apply_offset():
             try:
                 offset = float(offset_var.get())
+                self.save_undo_state(f"Offset all {offset:+.4f}mm")
                 # Track modifications for all cells
                 if self.modification_tracker:
                     for y in range(self.y_count):
