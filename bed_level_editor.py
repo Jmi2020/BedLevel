@@ -9,6 +9,7 @@ from tkinter import ttk, messagebox, filedialog
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
+from matplotlib.patches import Rectangle
 import numpy as np
 import re
 import os
@@ -17,9 +18,9 @@ class BedLevelEditor:
     def __init__(self, root):
         self.root = root
         self.root.title("Bed Level Editor - Elegoo OrangeStorm Giga")
-        self.root.geometry("1200x800")
+        self.root.geometry("1400x900")
 
-        self.config_file = "/home/user/BedLevel/printer.cfg"
+        self.config_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "printer.cfg")
         self.mesh_data = None
         self.original_mesh_data = None
         self.x_count = 10
@@ -27,6 +28,8 @@ class BedLevelEditor:
         self.selected_point = None
         self.mesh_min = (16, 10)
         self.mesh_max = (786, 767)
+        self.cbar = None
+        self.cell_labels = []
 
         # Color scheme
         self.bg_color = "#2b2b2b"
@@ -48,13 +51,16 @@ class BedLevelEditor:
         # File info
         tk.Label(control_frame, text="Config File:", bg=self.bg_color, fg=self.fg_color,
                 font=("Arial", 10, "bold")).pack(side=tk.LEFT, padx=5)
-        tk.Label(control_frame, text=self.config_file, bg=self.bg_color, fg=self.highlight_color,
-                font=("Arial", 9)).pack(side=tk.LEFT, padx=5)
+        self.file_label = tk.Label(control_frame, text=self.config_file, bg=self.bg_color, fg=self.highlight_color,
+                font=("Arial", 9))
+        self.file_label.pack(side=tk.LEFT, padx=5)
 
         # Buttons
         btn_frame = tk.Frame(control_frame, bg=self.bg_color)
         btn_frame.pack(side=tk.RIGHT)
 
+        tk.Button(btn_frame, text="Browse...", command=self.browse_file,
+                 bg="#9b59b6", fg=self.fg_color, padx=15, pady=5).pack(side=tk.LEFT, padx=5)
         tk.Button(btn_frame, text="Load", command=self.load_mesh_data,
                  bg=self.highlight_color, fg=self.fg_color, padx=15, pady=5).pack(side=tk.LEFT, padx=5)
         tk.Button(btn_frame, text="Save", command=self.save_mesh_data,
@@ -74,7 +80,7 @@ class BedLevelEditor:
                 bg=self.bg_color, fg=self.fg_color, font=("Arial", 11, "bold")).pack(pady=5)
 
         # Matplotlib figure
-        self.fig = Figure(figsize=(8, 7), facecolor=self.bg_color)
+        self.fig = Figure(figsize=(9.5, 8.5), facecolor=self.bg_color)
         self.ax = self.fig.add_subplot(111)
         self.canvas = FigureCanvasTkAgg(self.fig, master=left_panel)
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
@@ -155,6 +161,19 @@ class BedLevelEditor:
         tk.Button(batch_frame, text="Offset All Points", command=self.offset_all,
                  bg="#9b59b6", fg=self.fg_color, pady=5).pack(fill=tk.X, padx=5, pady=3)
 
+    def browse_file(self):
+        """Browse for printer.cfg file"""
+        filename = filedialog.askopenfilename(
+            title="Select printer.cfg file",
+            initialdir=os.path.dirname(self.config_file),
+            filetypes=[("Config files", "*.cfg"), ("All files", "*.*")]
+        )
+        if filename:
+            self.config_file = filename
+            self.file_label.config(text=self.config_file)
+            # Auto-load the selected file
+            self.load_mesh_data()
+
     def load_mesh_data(self):
         """Load mesh data from printer.cfg"""
         try:
@@ -166,8 +185,11 @@ class BedLevelEditor:
                 content = f.read()
 
             # Find the bed_mesh section
-            mesh_match = re.search(r'\[bed_mesh default\].*?points =\s*(.*?)(?=\n#\*#|\nz_count|$)',
-                                  content, re.DOTALL)
+            mesh_match = re.search(
+                r'\[bed_mesh default\].*?points =\s*(.*?)(?=\n(?:#\*#\s*)?(?:x_count|mesh_x_pps|mesh_y_pps|algo|min_x|max_x|min_y|max_y)|$)',
+                content,
+                re.DOTALL
+            )
 
             if not mesh_match:
                 messagebox.showerror("Error", "Could not find bed_mesh default section")
@@ -265,13 +287,17 @@ class BedLevelEditor:
             return
 
         self.ax.clear()
+        self.cell_labels = []
 
         # Create heatmap
-        im = self.ax.imshow(self.mesh_data, cmap='RdYlGn_r', aspect='auto', interpolation='bilinear')
+        im = self.ax.imshow(self.mesh_data, cmap='RdYlGn_r', aspect='auto', interpolation='nearest')
 
         # Add colorbar
-        if hasattr(self, 'cbar'):
-            self.cbar.remove()
+        if hasattr(self, 'cbar') and self.cbar is not None:
+            try:
+                self.cbar.remove()
+            except:
+                pass
         self.cbar = self.fig.colorbar(im, ax=self.ax, label='Z-Offset (mm)')
 
         # Add grid
@@ -286,10 +312,45 @@ class BedLevelEditor:
         self.ax.set_ylabel('Y Index', color='white', fontsize=10)
         self.ax.set_title('Bed Mesh Heat Map', color='white', fontsize=12, fontweight='bold')
 
-        # Highlight selected point
+        # Show four-heater layout
+        half_x = self.x_count / 2
+        half_y = self.y_count / 2
+        if self.x_count % 2 == 0:
+            self.ax.axvline(half_x - 0.5, color='white', linewidth=2, alpha=0.4)
+        if self.y_count % 2 == 0:
+            self.ax.axhline(half_y - 0.5, color='white', linewidth=2, alpha=0.4)
+
+        # Label quadrants (03=upper-left, 02=upper-right, 00=lower-left, 01=lower-right)
+        if self.x_count >= 4 and self.y_count >= 4:
+            quad_labels = [
+                ("03", self.x_count / 4 - 0.5, self.y_count / 4 - 0.5),
+                ("02", 3 * self.x_count / 4 - 0.5, self.y_count / 4 - 0.5),
+                ("00", self.x_count / 4 - 0.5, 3 * self.y_count / 4 - 0.5),
+                ("01", 3 * self.x_count / 4 - 0.5, 3 * self.y_count / 4 - 0.5),
+            ]
+            for label, x_pos, y_pos in quad_labels:
+                self.ax.text(x_pos, y_pos, label, ha='center', va='center',
+                             color='white', fontsize=24, alpha=0.25, fontweight='bold')
+
+        # Overlay numeric values per cell for quick reference
+        text_threshold = 0.55
+        for y in range(self.y_count):
+            for x in range(self.x_count):
+                value = self.mesh_data[y, x]
+                norm_value = im.norm(value)
+                text_color = '#111111' if norm_value > text_threshold else '#f7f7f7'
+                label = self.ax.text(x, y, f"{value:.2f}", ha='center', va='center',
+                                     color=text_color, fontsize=8, fontweight='bold')
+                self.cell_labels.append(label)
+
+        # Highlight selected point with a bold outline
         if self.selected_point is not None:
             y, x = self.selected_point
-            self.ax.plot(x, y, 'w*', markersize=20, markeredgecolor='black', markeredgewidth=2)
+            selection = Rectangle((x - 0.5, y - 0.5), 1, 1, linewidth=3,
+                                  edgecolor=self.highlight_color, facecolor='none')
+            self.ax.add_patch(selection)
+            self.ax.scatter([x], [y], s=120, facecolors='none',
+                            edgecolors='white', linewidths=2)
 
         # Style
         self.ax.tick_params(colors='white')
