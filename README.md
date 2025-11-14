@@ -1,240 +1,334 @@
 # Bed Level Editor for Elegoo OrangeStorm Giga
 
-Visual tools for manually adjusting bed leveling mesh points in your 3D printer configuration.
+Professional visual tools for manually adjusting bed leveling mesh points in your 3D printer configuration.
 
-## Two Versions Available
+## 🌟 Three Versions Available
 
-### 1. **bed_level_editor.py** (Standard Version)
+### 1. **bed_level_editor_pro.py** (Pro Edition) ⭐⭐⭐ **RECOMMENDED**
+**Beautiful, intuitive interface with professional UX/UI design.**
+
+**Latest improvements:**
+- ✅ Fixed text contrast (dark text on light, light on dark)
+- ✅ Fixed resize bug (stable plot layout)
+- ✅ Modern dark theme with perfect contrast
+- ✅ Hover effects on buttons
+- ✅ Keyboard shortcuts (Ctrl+S, Ctrl+Z, Ctrl+O, Esc)
+- ✅ Real-time status bar with feedback
+- ✅ Mode indicator (Point/Region)
+- ✅ Smooth, professional experience
+
+### 2. **bed_level_editor_enhanced.py** (Enhanced Edition) ⭐⭐
+Advanced editor with 3D visualization and region selection.
+
+### 3. **bed_level_editor.py** (Standard Edition) ⭐
 Simple, straightforward editor for basic mesh editing.
 
-### 2. **bed_level_editor_enhanced.py** (Enhanced Version) ⭐ NEW!
-Advanced editor with 3D visualization, interpolation preview, and region selection.
+---
+
+## 🎨 Pro Edition Features (NEW!)
+
+### Modern Design
+- **Dark Theme**: Easy on the eyes with professional color palette
+- **Better Contrast**: All text is readable on any background
+- **Hover Effects**: Buttons light up when you hover over them
+- **Visual Feedback**: Status bar shows what's happening in real-time
+- **Mode Indicator**: Always know if you're in Point or Region mode
+
+### Fixed Issues
+- **Text Readability**: Dark text on light cells, light text on dark cells
+- **Stable Layout**: No more resizing/jumping when selecting points
+- **Smooth Performance**: Uses optimized drawing for better responsiveness
+
+### Keyboard Shortcuts ⌨️
+- `Ctrl+S` - Save mesh data
+- `Ctrl+Z` - Reset to original
+- `Ctrl+O` - Open file browser
+- `Esc` - Clear selection
+
+### Enhanced UI Elements
+- **Large Value Display**: Easy-to-read Z-offset in monospace font
+- **Quick Adjust Buttons**: Color-coded for direction (red=down, green=up)
+- **Selection Highlight**: Glowing green border on selected points
+- **Region Highlight**: Red borders for multi-point selections
+- **Organized Sections**: Clear visual grouping of controls
 
 ---
 
-## Standard Version Features
+## Standard & Enhanced Features
 
-- **Visual Heatmap**: Color-coded mesh display (red = high, green = low)
-- **Click to Edit**: Select and edit individual points
-- **Multiple Adjustment Methods**:
-  - Direct value entry
-  - Fine adjustment slider (±0.5mm)
-  - Quick adjustment buttons (±0.01mm, ±0.1mm)
-- **4-Bed Layout**: Visual quadrant labels (00, 01, 02, 03)
-- **Statistics**: Min, max, range, mean, standard deviation
-- **Batch Operations**: Flatten or offset all points
-- **File Browser**: Load any printer.cfg file
-- **Safe Editing**: Automatic backup before saving
+### Common Features (All Versions)
+- ✅ Visual heatmap with color-coded display
+- ✅ 10x10 grid editing (100 points)
+- ✅ Multiple adjustment methods
+- ✅ Statistics panel
+- ✅ Batch operations
+- ✅ File browser
+- ✅ Automatic backups
 
-## Enhanced Version Features ⭐
+### Enhanced & Pro Only
+- ✅ 3D surface visualization
+- ✅ Interpolated mesh preview
+- ✅ Region selection (drag to select)
+- ✅ Region tools (average, smooth)
+- ✅ Side-by-side comparisons
 
-All standard features PLUS:
-
-### 🎨 3D Visualization
-- **Rotatable 3D Surface**: View your bed mesh as a 3D surface plot
-- **Interactive**: Zoom, rotate, and pan to inspect from any angle
-- **Color-mapped**: Same color scheme as heatmap for consistency
-
-### 🔍 Interpolated Mesh Preview
-- **See What Klipper Uses**: Preview the interpolated mesh that Klipper actually uses
-- **Side-by-Side Comparison**: Compare your 10x10 probed points vs the interpolated mesh
-- **Bicubic Interpolation**: Shows the mesh with mesh_pps (4x4 by default)
-- **Detailed Stats**: Understand how interpolation affects your mesh
-
-### ✏️ Region Selection & Bulk Editing
-- **Selection Modes**: Switch between single point and region selection
-- **Drag to Select**: Click and drag to select multiple points
-- **Region Operations**:
-  - Average all points in a region
-  - Smooth region using neighboring points
-  - Set all points in region to a specific value
-- **Visual Feedback**: Selected regions highlighted in red
-
-### 📊 Advanced Analysis
-- Identify problem areas quickly
-- Better understanding of bed warping
-- Visualize the effect of interpolation on your mesh
+### Pro Only
+- ✅ Modern dark UI
+- ✅ Perfect text contrast
+- ✅ Hover effects
+- ✅ Keyboard shortcuts
+- ✅ Status bar feedback
+- ✅ Optimized performance
 
 ---
 
-## Installation
+## 🚀 Installation
 
-Install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
 
-Dependencies:
-- matplotlib >= 3.5.0 (plotting and visualization)
+**Dependencies:**
+- matplotlib >= 3.5.0 (visualization)
 - numpy >= 1.21.0 (numerical operations)
-- scipy >= 1.7.0 (interpolation, enhanced version only)
+- scipy >= 1.7.0 (interpolation)
 
-## Usage
+---
 
-### Standard Version
+## 💻 Usage
+
+### Pro Edition (Recommended)
 ```bash
-python3 bed_level_editor.py
+python3 bed_level_editor_pro.py
 ```
 
-### Enhanced Version (Recommended)
+### Enhanced Edition
 ```bash
 python3 bed_level_editor_enhanced.py
 ```
 
-Or use the launcher:
+### Standard Edition
 ```bash
-./run_editor.sh
+python3 bed_level_editor.py
 ```
 
-## How to Use
+---
 
-### Basic Editing (Both Versions)
+## 📖 How to Use (Pro Edition)
 
-1. **Load a mesh**:
-   - Click "Browse..." to select a printer.cfg file
-   - Or it auto-loads from the same directory
+### Quick Start
+1. **Launch**: Run `python3 bed_level_editor_pro.py`
+2. **Select Mode**: Choose "Point" or "Region" mode
+3. **Select Points**: Click (point) or drag (region) on the heatmap
+4. **Adjust Value**: Use entry box, slider, or quick buttons
+5. **Update**: Click "UPDATE SELECTION" or press Enter
+6. **Save**: Click "💾 Save" or press Ctrl+S
 
-2. **Adjust a point**:
-   - Click on any point in the heatmap
-   - Enter a new value or use slider/buttons
-   - Click "Update Point" or press Enter
+### Selection Modes
 
-3. **Save changes**:
-   - Click "Save" button
-   - Backup created as `printer.cfg.backup`
+#### Point Mode (Default)
+- Click on any point to select it
+- Value shown in large display
+- Coordinates shown below
+- Green glow around selected point
 
-4. **Reset if needed**:
-   - Click "Reset" to restore original values
+#### Region Mode
+- Click and drag to select multiple points
+- Red borders show selected region
+- Average value displayed
+- All points update together
 
-### Enhanced Features (Enhanced Version Only)
+### Adjustment Methods
+1. **Direct Entry**: Type exact value and press Enter
+2. **Fine Slider**: Drag slider for precise ±0.5mm adjustment
+3. **Quick Buttons**:
+   - `--` : -0.1mm (red)
+   - `-` : -0.01mm (orange)
+   - `+` : +0.01mm (blue)
+   - `++` : +0.1mm (green)
 
-#### 3D Visualization
-- Click "3D View" button to see your mesh as a 3D surface
-- Drag to rotate, scroll to zoom
-- Great for identifying warping patterns
+### View Options
+- **🔄 Reload**: Reload mesh from file
+- **📊 3D View**: Open rotatable 3D surface visualization
+- **🔬 Interpolated**: See side-by-side probed vs interpolated mesh
 
-#### Interpolation Preview
-- Click "Interpolated" button
-- See side-by-side comparison of:
-  - Your 10x10 probed mesh (left)
-  - The interpolated mesh Klipper uses (right)
-- Helps understand how bicubic interpolation works
+### Region Tools
+- **📊 Average Region**: Set all points to average value
+- **✨ Smooth Region**: Smooth using neighbor averaging
+- **🗑️ Clear Selection**: Deselect all points
 
-#### Region Selection
-1. Switch to "Region Selection" mode (radio button)
-2. Click and drag to select multiple points
-3. Use region tools:
-   - **Average Region**: Sets all points to average value
-   - **Smooth Region**: Smooths using neighbors
-   - **Update Selection**: Sets all points to entered value
-4. Click "Clear Selection" when done
+### Batch Operations
+- **📏 Flatten All**: Set entire mesh to average
+- **↕️ Offset All**: Add/subtract value from all points
 
-## Understanding the Display
+---
+
+## 🎨 Understanding the Display
 
 ### Heatmap Colors
 - **Red/Orange**: Higher points (nozzle farther from bed)
 - **Yellow/Green**: Lower points (nozzle closer to bed)
-- **Numbers**: Z-offset values displayed on each cell
+- **Numbers on cells**: Exact Z-offset values
+- **Better contrast**: Dark text on light, light on dark
 
-### Grid Coordinates
-- X axis (horizontal): 0-9
-- Y axis (vertical): 0-9
-- Total: 100 points
+### Grid Layout
+- **X axis**: 0-9 (horizontal)
+- **Y axis**: 0-9 (vertical)
+- **Total**: 100 points
+- **White dashed lines**: Divide 4-bed layout
 
-### Quadrant Labels (for 4-Bed Layout)
+### Quadrant Labels (4-Bed Layout)
 - **03**: Upper-left (heater_bed3)
 - **02**: Upper-right (heater_bed2)
 - **00**: Lower-left (heater_bed)
 - **01**: Lower-right (heater_bed1)
 
-### Physical Coordinates
-- Bed range: X: 16-786mm, Y: 10-767mm
-- Approximate position shown when point selected
+### Visual Indicators
+- **Green glow**: Selected point (Point mode)
+- **Red borders**: Selected region (Region mode)
+- **● Indicator**: Current mode (top right)
+- **Status bar**: Current action/feedback (bottom)
 
-## Understanding Your Mesh
+---
+
+## 💡 Understanding Your Mesh
 
 ### Current Values
-- Your mesh values are typically around -4.3 to -4.5mm
-- **Less negative** (e.g., -4.28) = nozzle closer to bed
-- **More negative** (e.g., -4.54) = nozzle farther from bed
+- Typical range: -4.3 to -4.5mm
+- **Less negative** (-4.28) = nozzle closer to bed
+- **More negative** (-4.54) = nozzle farther from bed
 
-### Interpolation (mesh_pps)
-- Your config uses 4x4 mesh_pps
-- Turns 10x10 (100 points) into 37x37 (1369 points)
-- Klipper uses bicubic interpolation
-- The enhanced version shows you this interpolated mesh
+### Interpolation
+- Your config: 4x4 mesh_pps
+- Converts: 10x10 (100 points) → 37x37 (1,369 points)
+- Algorithm: Bicubic with tension 0.2
+- **View it**: Click "🔬 Interpolated" button
 
 ### Mesh Fade
-- Your config fades from 1mm to 30mm height
-- Compensation gradually reduces as Z increases
-- Completely disabled above 30mm
+- Starts: 1mm height
+- Ends: 30mm height
+- Effect: Gradually reduces compensation
+- Above 30mm: No compensation applied
 
-## Tips
+---
 
-- **Start Conservative**: Make small adjustments (±0.05mm)
-- **Test After Changes**: Run test prints to verify
-- **Use 3D View**: Helps identify overall bed shape
-- **Check Interpolation**: See if your adjustments will have the desired effect
-- **Use Region Selection**: Fix large areas faster
-- **Keep Backups**: The tool creates backups, but keep extras safe
+## ⚡ Pro Tips
 
-## Troubleshooting
+### Workflow
+1. **Start with 3D View** - See overall bed shape
+2. **Check Interpolation** - Verify smoothness
+3. **Use Region Mode** - Fix large areas faster
+4. **Test Small Changes** - ±0.05mm at a time
+5. **Save Often** - Backups are automatic
 
-### File Not Found
-- Use "Browse..." button to select your printer.cfg
-- Make sure the file exists in the expected location
+### Keyboard Shortcuts Save Time
+- `Ctrl+S` after each major change
+- `Esc` to quickly clear selection
+- `Ctrl+Z` if you make a mistake
 
-### Changes Not Applied
-- Restart Klipper firmware after saving
-- Run `BED_MESH_PROFILE LOAD=default` in console
-- Or rehome and run your start gcode
+### Region Selection is Powerful
+- Select warped quadrants and average them
+- Smooth bumpy areas
+- Level entire sections at once
 
-### Values Look Wrong
-- Click "Reset" to restore original values
-- Restore from .backup file if needed
+### Visual Feedback Helps
+- Watch status bar for confirmation
+- Mode indicator shows current state
+- Hover over buttons to see them light up
 
-### 3D View Not Working
-- Make sure matplotlib and scipy are installed
-- Try `pip install --upgrade matplotlib scipy`
+---
 
-## Safety Guidelines
+## 🔧 Troubleshooting
 
-⚠️ **IMPORTANT**:
-- **Never edit** while Klipper is printing
-- **Stop Klipper** before saving changes
-- **Always test** with a small print first
-- **Keep backups** of working configurations
-- **Document changes** so you can revert if needed
+### Text Hard to Read
+✅ **Fixed in Pro Edition!** Dark text on light backgrounds, light on dark.
 
-## After Editing
+### Plot Resizes When Clicking
+✅ **Fixed in Pro Edition!** Stable layout, no jumping.
 
-1. Save changes in the editor
-2. **Stop Klipper** services
-3. Verify backup was created
-4. **Restart Klipper** firmware
-5. Home printer and load mesh
-6. Run a test print (small, single layer)
-7. Observe first layer adhesion
+### Can't See Button Text
+✅ **Fixed in Pro Edition!** All buttons have white text on colored backgrounds.
+
+### Values Not Updating
+- Make sure you click "UPDATE SELECTION" or press Enter
+- Check that you have a selection active
+- Watch status bar for confirmation
+
+### Changes Not Applied in Klipper
+- Restart Klipper after saving
+- Run `BED_MESH_PROFILE LOAD=default`
+- Rehome and load start gcode
+
+---
+
+## ⚠️ Safety Guidelines
+
+**CRITICAL:**
+- ❌ Never edit while printing
+- ❌ Don't save while Klipper is running
+- ✅ Always stop Klipper first
+- ✅ Test with small prints
+- ✅ Keep backup files safe
+- ✅ Document your changes
+
+**After Editing:**
+1. Save in editor (Ctrl+S)
+2. **Stop Klipper services**
+3. Verify `.backup` file created
+4. **Restart Klipper**
+5. Home and load mesh
+6. Test with small print
+7. Observe first layer
 8. Fine-tune as needed
 
-## File Structure
+---
+
+## 📁 File Structure
 
 ```
 /home/user/BedLevel/
-├── printer.cfg                   # Your printer configuration
-├── printer.cfg.backup            # Automatic backup (created on save)
-├── bed_level_editor.py           # Standard editor
-├── bed_level_editor_enhanced.py  # Enhanced editor ⭐
+├── printer.cfg                   # Your printer config
+├── printer.cfg.backup            # Auto-backup (on save)
+│
+├── bed_level_editor_pro.py       # Pro edition ⭐⭐⭐ (RECOMMENDED)
+├── bed_level_editor_enhanced.py  # Enhanced edition ⭐⭐
+├── bed_level_editor.py           # Standard edition ⭐
+│
 ├── run_editor.sh                 # Launcher script
 ├── requirements.txt              # Python dependencies
 ├── README.md                     # This file
+├── CHANGELOG.md                  # Version history
 ├── AGENTS.md                     # Development guidelines
-└── klipper-reference/            # Klipper source (reference, gitignored)
+└── klipper-reference/            # Klipper source (gitignored)
 ```
 
-## Klipper Configuration Reference
+---
 
-Your OrangeStorm Giga uses:
+## 📊 Feature Comparison
+
+| Feature | Standard | Enhanced | Pro |
+|---------|----------|----------|-----|
+| 2D Heatmap | ✅ | ✅ | ✅ |
+| Point Editing | ✅ | ✅ | ✅ |
+| Batch Operations | ✅ | ✅ | ✅ |
+| File Browser | ✅ | ✅ | ✅ |
+| Statistics | ✅ | ✅ | ✅ |
+| 3D Visualization | ❌ | ✅ | ✅ |
+| Interpolation Preview | ❌ | ✅ | ✅ |
+| Region Selection | ❌ | ✅ | ✅ |
+| Region Tools | ❌ | ✅ | ✅ |
+| Modern Dark UI | ❌ | ❌ | ✅ |
+| Fixed Text Contrast | ❌ | ❌ | ✅ |
+| Hover Effects | ❌ | ❌ | ✅ |
+| Keyboard Shortcuts | ❌ | ❌ | ✅ |
+| Status Bar | ❌ | ❌ | ✅ |
+| Stable Layout | ❌ | ❌ | ✅ |
+
+---
+
+## 🎓 Klipper Configuration Reference
+
+Your OrangeStorm Giga configuration:
 ```ini
 [bed_mesh]
 speed: 120
@@ -249,12 +343,38 @@ fade_start: 1.0
 fade_end: 30.0
 ```
 
-## Contributing
+---
+
+## 📝 Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for version history and detailed changes.
+
+---
+
+## 👥 Contributing
 
 See [AGENTS.md](AGENTS.md) for development guidelines.
 
-## References
+---
 
-- [Klipper Bed Mesh Documentation](https://www.klipper3d.org/Bed_Mesh.html)
+## 📚 References
+
+- [Klipper Bed Mesh Docs](https://www.klipper3d.org/Bed_Mesh.html)
 - [Elegoo OrangeStorm Giga](https://www.elegoo.com/products/elegoo-orangestorm-giga-3d-printer)
 - [Klipper GitHub](https://github.com/Klipper3d/klipper)
+
+---
+
+## 🌟 What's New in Pro Edition
+
+### v3.0 Release Highlights
+- ✨ **Fixed text contrast** - Perfect readability on all backgrounds
+- ✨ **Fixed resize bug** - Stable, smooth visualization
+- ✨ **Modern UI** - Professional dark theme
+- ✨ **Keyboard shortcuts** - Work faster with hotkeys
+- ✨ **Better feedback** - Status bar shows everything
+- ✨ **Hover effects** - Interactive, responsive buttons
+- ✨ **Mode indicator** - Always know your mode
+- ✨ **Optimized performance** - Faster, smoother
+
+**Upgrade to Pro Edition for the best experience!**
