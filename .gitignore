@@ -1,0 +1,41 @@
+# Klipper reference repository (cloned for analysis, not part of project)
+klipper-reference/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv
+env/
+ENV/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Backup files
+*.backup
+printer.cfg.backup
+
+# Temporary files
+*.tmp
+*.log
+
+# macOS app build artifacts
+build/
+dist/
+.venv-macos-app/
+.venv-pyinstaller/
+.claude/
+AGENTS.md
+.venv-pyinstaller/

@@ -1,0 +1,328 @@
+{
+  "move_tool_coordinate": {
+    "x": 507.01,
+    "y": 306.22,
+    "z": 0,
+    "instruction": "Enter these coordinates in Elegoo Slicer Move tool to position the test squares correctly"
+  },
+  "mesh_config": {
+    "mesh_min": [
+      16,
+      10
+    ],
+    "mesh_max": [
+      786,
+      767
+    ],
+    "x_count": 10,
+    "y_count": 10,
+    "x_spacing": 85.56,
+    "y_spacing": 84.11
+  },
+  "test_print": {
+    "num_squares": 23,
+    "test_height_mm": 0.4,
+    "square_size_mm": 82.11
+  },
+  "modified_cells": [
+    {
+      "grid_index": [
+        6,
+        0
+      ],
+      "position_mm": [
+        529.33,
+        10.0
+      ],
+      "row": 0,
+      "col": 6
+    },
+    {
+      "grid_index": [
+        7,
+        0
+      ],
+      "position_mm": [
+        614.89,
+        10.0
+      ],
+      "row": 0,
+      "col": 7
+    },
+    {
+      "grid_index": [
+        6,
+        1
+      ],
+      "position_mm": [
+        529.33,
+        94.11
+      ],
+      "row": 1,
+      "col": 6
+    },
+    {
+      "grid_index": [
+        7,
+        1
+      ],
+      "position_mm": [
+        614.89,
+        94.11
+      ],
+      "row": 1,
+      "col": 7
+    },
+    {
+      "grid_index": [
+        8,
+        1
+      ],
+      "position_mm": [
+        700.44,
+        94.11
+      ],
+      "row": 1,
+      "col": 8
+    },
+    {
+      "grid_index": [
+        2,
+        2
+      ],
+      "position_mm": [
+        187.11,
+        178.22
+      ],
+      "row": 2,
+      "col": 2
+    },
+    {
+      "grid_index": [
+        3,
+        2
+      ],
+      "position_mm": [
+        272.67,
+        178.22
+      ],
+      "row": 2,
+      "col": 3
+    },
+    {
+      "grid_index": [
+        4,
+        2
+      ],
+      "position_mm": [
+        358.22,
+        178.22
+      ],
+      "row": 2,
+      "col": 4
+    },
+    {
+      "grid_index": [
+        6,
+        2
+      ],
+      "position_mm": [
+        529.33,
+        178.22
+      ],
+      "row": 2,
+      "col": 6
+    },
+    {
+      "grid_index": [
+        7,
+        2
+      ],
+      "position_mm": [
+        614.89,
+        178.22
+      ],
+      "row": 2,
+      "col": 7
+    },
+    {
+      "grid_index": [
+        8,
+        2
+      ],
+      "position_mm": [
+        700.44,
+        178.22
+      ],
+      "row": 2,
+      "col": 8
+    },
+    {
+      "grid_index": [
+        5,
+        4
+      ],
+      "position_mm": [
+        443.78,
+        346.44
+      ],
+      "row": 4,
+      "col": 5
+    },
+    {
+      "grid_index": [
+        6,
+        4
+      ],
+      "position_mm": [
+        529.33,
+        346.44
+      ],
+      "row": 4,
+      "col": 6
+    },
+    {
+      "grid_index": [
+        7,
+        4
+      ],
+      "position_mm": [
+        614.89,
+        346.44
+      ],
+      "row": 4,
+      "col": 7
+    },
+    {
+      "grid_index": [
+        8,
+        4
+      ],
+      "position_mm": [
+        700.44,
+        346.44
+      ],
+      "row": 4,
+      "col": 8
+    },
+    {
+      "grid_index": [
+        4,
+        5
+      ],
+      "position_mm": [
+        358.22,
+        430.56
+      ],
+      "row": 5,
+      "col": 4
+    },
+    {
+      "grid_index": [
+        4,
+        6
+      ],
+      "position_mm": [
+        358.22,
+        514.67
+      ],
+      "row": 6,
+      "col": 4
+    },
+    {
+      "grid_index": [
+        5,
+        6
+      ],
+      "position_mm": [
+        443.78,
+        514.67
+      ],
+      "row": 6,
+      "col": 5
+    },
+    {
+      "grid_index": [
+        6,
+        6
+      ],
+      "position_mm": [
+        529.33,
+        514.67
+      ],
+      "row": 6,
+      "col": 6
+    },
+    {
+      "grid_index": [
+        7,
+        6
+      ],
+      "position_mm": [
+        614.89,
+        514.67
+      ],
+      "row": 6,
+      "col": 7
+    },
+    {
+      "grid_index": [
+        8,
+        6
+      ],
+      "position_mm": [
+        700.44,
+        514.67
+      ],
+      "row": 6,
+      "col": 8
+    },
+    {
+      "grid_index": [
+        4,
+        7
+      ],
+      "position_mm": [
+        358.22,
+        598.78
+      ],
+      "row": 7,
+      "col": 4
+    },
+    {
+      "grid_index": [
+        4,
+        8
+      ],
+      "position_mm": [
+        358.22,
+        682.89
+      ],
+      "row": 8,
+      "col": 4
+    }
+  ],
+  "instructions": {
+    "elegoo_slicer": [
+      "1. Open Elegoo Slicer",
+      "2. File \u2192 Open Project",
+      "3. Select the .3mf file (object will be centered)",
+      "4. Click on the imported object to select it",
+      "5. Click the Move tool in the left toolbar",
+      "6. In the position dialog, enter these coordinates:",
+      "   X: 507.01",
+      "   Y: 306.22",
+      "   Z: 0",
+      "7. Press Enter to apply the position",
+      "8. Verify test squares are now at mesh grid locations",
+      "9. Slice and generate G-code",
+      "10. Print and verify first layer adhesion"
+    ],
+    "troubleshooting": {
+      "object_centered": "Use Move tool and enter the coordinates above",
+      "objects_off_bed": "Verify Klipper mesh_min/mesh_max match printer bed size",
+      "wrong_position": "Double-check you entered X and Y values correctly",
+      "z_not_zero": "Z should be 0 so squares sit on the bed"
+    }
+  }
+}
