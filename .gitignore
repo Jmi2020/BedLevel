@@ -30,3 +30,12 @@ printer.cfg.backup
 # Temporary files
 *.tmp
 *.log
+
+# macOS app build artifacts
+build/
+dist/
+.venv-macos-app/
+.venv-pyinstaller/
+.claude/
+AGENTS.md
+.venv-pyinstaller/

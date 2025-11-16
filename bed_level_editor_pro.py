@@ -4,6 +4,31 @@ Enhanced Bed Level Editor for Elegoo OrangeStorm Giga - UX/UI Optimized
 Beautiful, intuitive interface for precise bed mesh editing
 """
 
+import os
+import sys
+
+# Ensure bundled dependencies resolve correctly when running as a frozen app
+if getattr(sys, "frozen", False):
+    resource_dir = os.environ.get("RESOURCEPATH")
+    if not resource_dir:
+        resource_dir = os.path.abspath(
+            os.path.join(os.path.dirname(sys.executable), os.pardir, "Resources")
+        )
+    python_tag = f"python{sys.version_info.major}.{sys.version_info.minor}"
+    zip_path = os.path.join(resource_dir, f"{python_tag}.zip")
+    lib_path = os.path.join(resource_dir, "lib", python_tag)
+    extra_paths = []
+    if os.path.exists(zip_path):
+        extra_paths.append(zip_path)
+    if os.path.isdir(lib_path):
+        extra_paths.append(lib_path)
+        site_packages = os.path.join(lib_path, "site-packages")
+        if os.path.isdir(site_packages):
+            extra_paths.append(site_packages)
+    for path in extra_paths:
+        if path not in sys.path:
+            sys.path.insert(0, path)
+
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import matplotlib.pyplot as plt
@@ -15,7 +40,6 @@ import matplotlib.cm as cm
 import numpy as np
 from scipy import interpolate
 import re
-import os
 import json
 from datetime import datetime
 
@@ -909,7 +933,9 @@ class BedLevelEditorPro:
         self.root.resizable(True, True)
         self.root.minsize(1200, 800)  # Minimum size to prevent UI breaking
 
-        self.config_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "printer.cfg")
+        self.app_dir = self._resolve_app_dir()
+        default_config = os.path.join(self.app_dir, "printer.cfg")
+        self.config_file = default_config if os.path.exists(default_config) else None
         self.mesh_data = None
         self.original_mesh_data = None
         self.x_count = 10
@@ -963,7 +989,7 @@ class BedLevelEditorPro:
         }
 
         self.setup_ui()
-        self.load_mesh_data()
+        self.initialize_config()
 
         # Keyboard shortcuts
         self.root.bind('<Control-s>', lambda e: self.save_mesh_data())
@@ -971,6 +997,44 @@ class BedLevelEditorPro:
         self.root.bind('<Control-Shift-Z>', lambda e: self.reset_mesh_data())  # Changed to Ctrl+Shift+Z for full reset
         self.root.bind('<Control-o>', lambda e: self.browse_file())
         self.root.bind('<Escape>', lambda e: self.clear_region())
+
+    def _resolve_app_dir(self):
+        """Detect the directory where resources live (handles bundled app)"""
+        if getattr(sys, 'frozen', False):
+            executable_dir = os.path.dirname(sys.executable)
+            resources_dir = os.path.abspath(os.path.join(executable_dir, os.pardir, 'Resources'))
+            if os.path.exists(resources_dir):
+                return resources_dir
+            return executable_dir
+        return os.path.dirname(os.path.abspath(__file__))
+
+    def initialize_config(self):
+        """Load default config or prompt user to select one"""
+        if self.config_file and os.path.exists(self.config_file):
+            self.file_label.config(text=self._friendly_file_label())
+            self.load_mesh_data()
+        else:
+            self.file_label.config(text="Select printer.cfg...")
+            self.update_status("Awaiting configuration file...", self.colors['accent_orange'])
+            messagebox.showinfo(
+                "Select Configuration",
+                "Select your printer.cfg file to begin editing the mesh."
+            )
+            self.browse_file()
+
+    def _friendly_file_label(self):
+        """Return human-readable label for current config file"""
+        if self.config_file:
+            return os.path.basename(self.config_file)
+        return "Select printer.cfg..."
+
+    def _initial_browse_dir(self):
+        """Determine sensible starting directory for file dialog"""
+        if self.config_file:
+            directory = os.path.dirname(self.config_file)
+            if os.path.exists(directory):
+                return directory
+        return os.path.expanduser("~/")
 
     def setup_ui(self):
         """Setup modern, intuitive UI"""
@@ -1015,7 +1079,7 @@ class BedLevelEditorPro:
         tk.Label(left_section, text="📁", font=self.fonts['title'],
                 bg=self.colors['bg_medium'], fg=self.colors['fg_primary']).pack(side=tk.LEFT, padx=(0, 8))
 
-        self.file_label = tk.Label(left_section, text=os.path.basename(self.config_file),
+        self.file_label = tk.Label(left_section, text=self._friendly_file_label(),
                                    font=self.fonts['normal'], bg=self.colors['bg_medium'],
                                    fg=self.colors['accent_blue'])
         self.file_label.pack(side=tk.LEFT)
@@ -1393,12 +1457,12 @@ class BedLevelEditorPro:
         """Browse for printer.cfg file"""
         filename = filedialog.askopenfilename(
             title="Select printer.cfg file",
-            initialdir=os.path.dirname(self.config_file),
+            initialdir=self._initial_browse_dir(),
             filetypes=[("Config files", "*.cfg"), ("All files", "*.*")]
         )
         if filename:
             self.config_file = filename
-            self.file_label.config(text=os.path.basename(self.config_file))
+            self.file_label.config(text=self._friendly_file_label())
             self.load_mesh_data()
 
     def load_mesh_data(self):
