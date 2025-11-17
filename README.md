@@ -23,9 +23,19 @@ Each edition reads `printer.cfg`, draws a heatmap of the 100 mesh points, and sa
 - Point editing via text box, sliders, and quick ± buttons.
 - Batch operations: “Level All,” offsets, flattening.
 - Mesh statistics: min/max/range/mean/std dev.
+- Targeted test squares: Pro edition exports two-layer 3MF/STL tests for only the tiles you touched and tracks which ones still need printing.
 - Region selection (Enhanced/Pro) with averaging or smoothing.
 - Backup on save: `printer.cfg.backup` appears before any overwrite.
 - File browser, undo stack (Pro), and working-cell tracker for test squares.
+
+## Targeted Test Squares for Changed Tiles
+The Pro editor remembers every point you nudge. Untested cells stay orange, and a one-click **🖨️ Generate Test Print** button (under *Modification Tracking*) creates 2-layer squares strictly for those cells so you can validate the real bed without wasting filament.
+
+1. Edit the mesh like normal; modified cells are tracked automatically.
+2. Click **🖨️ Generate Test Print**, pick 3MF (recommended) or STL, enter layer height/layers, and optionally split large batches (>10 cells) into multiple files.
+3. The exported 3MF already contains the correct XY transforms, so Elegoo Slicer drops each square on the exact tile. STL exports include a reference frame to align manually. A JSON placement guide sits alongside the file for quick Move-tool coordinates and troubleshooting tips.
+
+Sample outputs live in `Examples/BedLevel_Test_23cells.3mf` (and the accompanying `_positions.json` guide) if you want to preview the workflow. Implementation details and slicer behavior research are documented in `Research/printTestSquares.md` and `Research/objectPlacementonBed.md` for anyone extending the generator.
 
 ## Install & Run
 1. **Install dependencies** (once per machine):
